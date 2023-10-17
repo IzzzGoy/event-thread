@@ -45,11 +45,11 @@ class ScopeEventsThreadBuilder {
 
     val configs = mutableMapOf<String, ConfigBuilder.() -> Unit>()
 
-    /*fun threads(block: Config.() -> Unit) {
+    fun threads(block: Config.() -> Unit) {
         with(config) {
             block()
         }
-    }*/
+    }
 }
 
 class ConfigBuilder {

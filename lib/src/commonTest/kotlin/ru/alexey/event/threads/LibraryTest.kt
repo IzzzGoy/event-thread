@@ -16,8 +16,6 @@ data object TestEvent : Event
 data object WrongEvent : Event
 
 class LibraryTest {
-    
-    
     @Test
     fun test() = runTest {
         
@@ -88,7 +86,7 @@ class LibraryTest {
                 container("3")
             }
 
-            /*threads {
+            threads {
                 eventThread<TestEvent> {
                     println("!")
                 }
@@ -97,7 +95,7 @@ class LibraryTest {
                 } bind { value: Int, _ ->
                     value + 1
                 }
-            }*/
+            }
         }
 
         config.eventBus + WrongEvent
