@@ -40,7 +40,7 @@ kotlin {
         browser {
             testTask {
                 useKarma {
-                    useFirefox()
+                    useSafari()
                 }
             }
         }

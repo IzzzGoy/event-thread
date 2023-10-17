@@ -3,16 +3,13 @@
  */
 package ru.alexey.event.threads
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.last
-import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
+import kotlin.time.Duration.Companion.minutes
 
 data object TestEvent : Event
 
@@ -20,61 +17,96 @@ data object WrongEvent : Event
 
 class LibraryTest {
     
-    lateinit var eventBus: EventBus
     
-    @BeforeTest
-    fun prepare() {
-        eventBus = EventBus()
+    @Test
+    fun test() = runTest {
+        
+        val config = eventsBuilder {
+
+            config {
+                createEventBus {
+                    watcher {
+                        println(it)
+                    }
+                }
+            }
+            /*threads {
+                eventThread<TestEvent> {
+                    assertSame(TestEvent, it)
+                }
+            }*/
+        }
+        
+        config.eventBus + TestEvent
+        
+        delay(1000)
+
     }
     
     @Test
-    fun test() {
-        
-        eventsBuilder(eventBus) {
-            eventThread<TestEvent> {
-                assertSame(TestEvent, it)
-            }
-        }
-        
-        eventBus + TestEvent
-        
-    }
-    
-    @Test
-    fun test1() {
-        eventsBuilder(eventBus) {
-            eventThread<TestEvent> {
-                println("!")
-            }
-            eventThread<WrongEvent> {
-                assertIs<WrongEvent>(it)
-            }
+    fun test1() = runTest {
+        val config = eventsBuilder {
+
+            /*threads {
+                eventThread<TestEvent> {
+                    println("!")
+                }
+                eventThread<WrongEvent> {
+                    assertIs<WrongEvent>(it)
+                    this + TestEvent
+                }
+            }*/
         }
 
-        eventBus + WrongEvent
+        config.eventBus + WrongEvent
+        delay(1000)
     }
 
     @Test
-    fun test2() = runTest {
+    fun test2() = runTest(
+        timeout = 1.minutes
+    ) {
 
-        val dc: Datacontainer<Int> = datacontainer(11)
+        val config = eventsBuilder {
 
-        eventsBuilder(eventBus) {
-            eventThread<TestEvent> {
-                println("!")
+            config {
+
+                createEventBus {
+                    watcher {
+                        println("Hello World!")
+                    }
+                }
             }
-            eventThread<WrongEvent> {
-                assertIs<WrongEvent>(it)
-            }.bind(dc) {
-                12
+
+            containers {
+                container(8) {
+                    transform<String> { o: String, i ->
+                        o.toInt() + i
+                    }
+                }
+
+                container("3")
             }
+
+            /*threads {
+                eventThread<TestEvent> {
+                    println("!")
+                }
+                eventThread<WrongEvent> {
+                    assertIs<WrongEvent>(it)
+                } bind { value: Int, _ ->
+                    value + 1
+                }
+            }*/
         }
 
-        eventBus + WrongEvent
+        config.eventBus + WrongEvent
 
         launch {
-            dc.take(1).collect {
-                assertEquals(12, it)
+            val dc = config.resolveOrThrow<Int>()
+            assertNotNull(dc)
+            dc.take(2).collect {
+                println(it)
             }
         }
     }
