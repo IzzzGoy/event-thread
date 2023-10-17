@@ -8,12 +8,15 @@ import kotlin.reflect.KClass
 interface Event
 
 @OptIn(ExperimentalStdlibApi::class)
-class EventBus: AutoCloseable {
+class EventBus(
+    private val watchers: List<(Event) -> Unit>
+): AutoCloseable {
     
     private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val channel: Channel<Event> = Channel()
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
     
+
     fun unsubscribe(clazz: KClass<out Event>) {
         subscribers.remove(clazz)
     }
@@ -29,8 +32,15 @@ class EventBus: AutoCloseable {
     init {
         coroutineScope.launch {
             for (event in channel) {
-                subscribers.values.forEach {
-                    it.action(event)
+                launch {
+                    watchers.forEach { it(event) }
+                }
+                launch {
+                    subscribers.values.forEach {
+                        it.actions.forEach {
+                            it(event)
+                        }
+                    }
                 }
             }
         }
@@ -56,4 +66,24 @@ class EventBus: AutoCloseable {
         subscribers.values.forEach(EventThread<*>::close)
         coroutineScope.cancel()
     }
+
+    companion object {
+        fun defaultFactory(): EventBus {
+            return EventBus(emptyList())
+        }
+    }
+}
+
+class EventBussBuilder {
+    private val interceptors = mutableListOf<(Event) -> Unit>()
+
+    fun build(): EventBus = EventBus(interceptors)
+
+    fun watcher(watcher: (Event) -> Unit) {
+        interceptors.add(watcher)
+    }
+}
+
+fun ConfigBuilder.createEventBus(block: EventBussBuilder.() -> Unit) {
+    eventBus = EventBussBuilder().also(block).build()
 }
