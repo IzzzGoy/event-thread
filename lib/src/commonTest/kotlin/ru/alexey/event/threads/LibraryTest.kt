@@ -28,11 +28,11 @@ class LibraryTest {
                     }
                 }
             }
-            /*threads {
+            threads {
                 eventThread<TestEvent> {
                     assertSame(TestEvent, it)
                 }
-            }*/
+            }
         }
         
         config.eventBus + TestEvent
@@ -45,7 +45,7 @@ class LibraryTest {
     fun test1() = runTest {
         val config = eventsBuilder {
 
-            /*threads {
+            threads {
                 eventThread<TestEvent> {
                     println("!")
                 }
@@ -53,7 +53,7 @@ class LibraryTest {
                     assertIs<WrongEvent>(it)
                     this + TestEvent
                 }
-            }*/
+            }
         }
 
         config.eventBus + WrongEvent
@@ -68,7 +68,6 @@ class LibraryTest {
         val config = eventsBuilder {
 
             config {
-
                 createEventBus {
                     watcher {
                         println("Hello World!")
@@ -81,9 +80,16 @@ class LibraryTest {
                     transform<String> { o: String, i ->
                         o.toInt() + i
                     }
+                    transform<Long> { other, i ->
+                        i * other.toInt()
+                    }
                 }
-
                 container("3")
+                container(16L) {
+                    transform<String> { s: String, l: Long ->
+                        s.toLong() * l
+                    }
+                }
             }
 
             threads {
@@ -92,6 +98,7 @@ class LibraryTest {
                 }
                 eventThread<WrongEvent> {
                     assertIs<WrongEvent>(it)
+                    this + TestEvent
                 } bind { value: Int, _ ->
                     value + 1
                 }

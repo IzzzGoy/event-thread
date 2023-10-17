@@ -37,19 +37,22 @@ class ScopeEventsThreadBuilder {
                     override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? {
                         return (builder.containers[clazz])?.let { it as Datacontainer<T> }
                     }
+                    init {
+                        applied.forEach {
+                            with(this) {
+                                it()
+                            }
+                        }
+                    }
                 }.also {
-                    builder.channel = true
+                    builder.channel.unlock()
                 }
         }
     }
 
     val configs = mutableMapOf<String, ConfigBuilder.() -> Unit>()
+    val applied = mutableListOf<Config.() -> Unit>()
 
-    fun threads(block: Config.() -> Unit) {
-        with(config) {
-            block()
-        }
-    }
 }
 
 class ConfigBuilder {
@@ -57,7 +60,7 @@ class ConfigBuilder {
     val containers: MutableMap<KClass<out Any>, Datacontainer<out Any>>
         = mutableMapOf()
 
-    var channel = false
+    var channel = Mutex(true)
 }
 
 inline fun ScopeEventsThreadBuilder.config(noinline block: ConfigBuilder.() -> Unit) {
@@ -66,6 +69,10 @@ inline fun ScopeEventsThreadBuilder.config(noinline block: ConfigBuilder.() -> U
 
 inline fun ScopeEventsThreadBuilder.containers(noinline block: ConfigBuilder.() -> Unit) {
     configs.put("containers", block)
+}
+
+inline fun ScopeEventsThreadBuilder.threads(noinline block: Config.() -> Unit) {
+    applied.add(block)
 }
 
 abstract class Config {

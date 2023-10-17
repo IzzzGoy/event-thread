@@ -17,15 +17,18 @@ abstract class RealDataContainer<T>(
     
 ): StateFlow<T> by stateFlow, Datacontainer<T>
 
-fun<T> container(initial: T): RealDataContainer<T> {
+inline fun<reified T: Any> ConfigBuilder.container(initial: T){
     
     val innerFlow = MutableStateFlow(initial)
     
-    return object : RealDataContainer<T>(innerFlow) {
-        override fun update(block: (T) -> T) {
-            innerFlow.update(block)
-        }
-    }
+    containers.put(
+        T::class,
+        object : RealDataContainer<T>(innerFlow) {
+            override fun update(block: (T) -> T) {
+                innerFlow.update(block)
+            }
+        } as Datacontainer<T>
+    )
 }
 
 inline fun<reified T: Any> ConfigBuilder.container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
@@ -69,9 +72,7 @@ class DatacontainerBuilder<T: Any> {
         val t = Transform(
             other = {
                 flow {
-                    while (!channel) {
-                        delay(100)
-                    }
+                    channel.withLock {}
                     containers.get(Other::class)?.let {
                         emitAll(it as Datacontainer<Other>)
                     }
