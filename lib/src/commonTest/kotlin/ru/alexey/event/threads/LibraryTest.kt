@@ -3,6 +3,15 @@
  */
 package ru.alexey.event.threads
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 data object TestEvent : Event
@@ -43,5 +52,30 @@ class LibraryTest {
         }
 
         eventBus + WrongEvent
+    }
+
+    @Test
+    fun test2() = runTest {
+
+        val dc: Datacontainer<Int> = datacontainer(11)
+
+        eventsBuilder(eventBus) {
+            eventThread<TestEvent> {
+                println("!")
+            }
+            eventThread<WrongEvent> {
+                assertIs<WrongEvent>(it)
+            }.bind(dc) {
+                12
+            }
+        }
+
+        eventBus + WrongEvent
+
+        launch {
+            dc.take(1).collect {
+                assertEquals(12, it)
+            }
+        }
     }
 }
