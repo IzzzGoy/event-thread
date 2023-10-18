@@ -4,11 +4,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 
-interface Resource<T>
+interface Resource<T> {
+    operator fun invoke(): T
+}
 
 
 interface ObservableResource<T> : StateFlow<T>, Resource<T> {
     fun update(block: (T) -> T)
+
+    override fun invoke(): T = value
 }
 
 class FlowResource<T>(

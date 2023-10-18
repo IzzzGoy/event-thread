@@ -85,7 +85,12 @@ class LibraryTest {
 
             recourses {
                 create {
-                    flowResource(1L)
+                    flowResource<Long>(
+                        get<Double>().toLong()
+                    )
+                }
+                create {
+                    flowResource<Double>(51.9)
                 }
             }
 
