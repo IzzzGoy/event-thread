@@ -40,7 +40,6 @@ class ScopeEventsThreadBuilder {
     val containerBuilder = ContainerBuilder()
     val applied = mutableListOf<Config.() -> Unit>()
     val resources = RecoursesBuilder()
-
 }
 class ConfigBuilder {
 
@@ -105,6 +104,8 @@ abstract class Config {
             }
         }
     }
+
+    inline fun<reified T: Any> ScopeEventsThreadBuilder.resource() = resources.resolve<T>()
 }
 fun eventsBuilder(block: ScopeEventsThreadBuilder.() -> Unit): Config {
     val scope = ScopeEventsThreadBuilder().also(block)

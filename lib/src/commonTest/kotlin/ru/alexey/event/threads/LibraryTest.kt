@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.datacontainer.container
+import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.recourses
 import kotlin.jvm.JvmInline
@@ -19,6 +20,15 @@ data object WrongEvent : Event
 
 @JvmInline
 value class IntEvent(val number: Int) : Event
+
+
+data class Returned(val s: String, val m: Int)
+
+class TestResource(val i: Returned) : Resource<Returned> {
+    override fun invoke(): Returned {
+        return i
+    }
+}
 
 class LibraryTest {
     @Test
@@ -92,6 +102,17 @@ class LibraryTest {
                 create {
                     flowResource<Double>(51.9)
                 }
+                create {
+                    flowResource(-15)
+                }
+                create {
+                    flowResource("Str")
+                }
+                create {
+                    TestResource(
+                        inject(::Returned)
+                    )
+                }
             }
 
             containers {
@@ -116,6 +137,9 @@ class LibraryTest {
             threads {
                 eventThread<TestEvent> {
                     println("!")
+                    resource<Returned>().also {
+                        println(it())
+                    }
                 }
                 eventThread<WrongEvent> {
                     assertIs<WrongEvent>(it)
