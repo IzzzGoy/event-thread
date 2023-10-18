@@ -1,26 +1,19 @@
-package ru.alexey.event.threads
+package ru.alexey.event.threads.datacontainer
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.consume
-import kotlinx.coroutines.channels.consumeEach
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.withLock
+import ru.alexey.event.threads.ContainerBuilder
+import ru.alexey.event.threads.ScopeEventsThreadBuilder
+import ru.alexey.event.threads.resources.ObservableResource
+import ru.alexey.event.threads.resources.Resource
+import ru.alexey.event.threads.resources.flowResource
 
-interface Datacontainer<T> : StateFlow<T> {
-    fun update(block: (T) -> T)
-}
+inline fun<reified T: Any> ContainerBuilder.container(initial: T){
 
-abstract class RealDataContainer<T>(
-    stateFlow: StateFlow<T>,
-    
-): StateFlow<T> by stateFlow, Datacontainer<T>
-
-inline fun<reified T: Any> ConfigBuilder.container(initial: T){
-    
     val innerFlow = MutableStateFlow(initial)
-    
+
     containers.put(
         T::class,
         object : RealDataContainer<T>(innerFlow) {
@@ -31,11 +24,17 @@ inline fun<reified T: Any> ConfigBuilder.container(initial: T){
     )
 }
 
-inline fun<reified T: Any> ConfigBuilder.container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
+inline fun<reified T: Any> ContainerBuilder.container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
 
-    val innerFlow = MutableStateFlow(initial)
+    var proxy: ObservableResource<T>
+    var transforms: List<Transform<out Any, T>>
 
-    val trasformed: Flow<T> = DatacontainerBuilder<T>().apply(block).transforms.fold(innerFlow as Flow<T>) { acc, (flow, transform) ->
+    DatacontainerBuilder<T>().apply(block).also {
+        proxy = it.proxy ?: flowResource(initial)
+        transforms = it.transforms
+    }
+
+    val trasformed: Flow<T> = transforms.fold(proxy as Flow<T>) { acc, (flow, transform) ->
         flow().combine(acc, transform)
     }
 
@@ -48,7 +47,7 @@ inline fun<reified T: Any> ConfigBuilder.container(initial: T, block: Datacontai
     object : RealDataContainer<T>(result) {
 
         override fun update(block: (T) -> T) {
-            innerFlow.update(block)
+            proxy.update(block)
         }
         init {
             containers.put(T::class, this as Datacontainer<T>)
@@ -66,13 +65,14 @@ class DatacontainerBuilder<T: Any> {
 
     val transforms = mutableListOf<Transform<out Any, T>>()
 
+    var proxy: ObservableResource<T>? = null
 
 
-    inline fun<reified Other: Any> ConfigBuilder.transform( noinline block: suspend (Other, T) -> T) {
+    inline fun<reified Other: Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
         val t = Transform(
             other = {
                 flow {
-                    channel.withLock {}
+                    mutex.withLock {}
                     containers.get(Other::class)?.let {
                         emitAll(it as Datacontainer<Other>)
                     }
@@ -81,5 +81,9 @@ class DatacontainerBuilder<T: Any> {
             action = block
         )
         transforms.add(t)
+    }
+
+    inline fun<reified R: Any> ScopeEventsThreadBuilder.resource() {
+        proxy = resources.resolveObserved<R>() as? ObservableResource<T>
     }
 }

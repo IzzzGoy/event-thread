@@ -9,10 +9,10 @@ interface Event
 
 @OptIn(ExperimentalStdlibApi::class)
 class EventBus(
+    private val coroutineScope: CoroutineScope,
     private val watchers: List<(Event) -> Unit>
 ): AutoCloseable {
-    
-    private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     private val channel: Channel<Event> = Channel()
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
     
@@ -37,8 +37,10 @@ class EventBus(
                 }
                 launch {
                     subscribers.values.forEach {
-                        it.actions.forEach {
-                            it(event)
+                        launch {
+                            it.actions.forEach {
+                                it(event)
+                            }
                         }
                     }
                 }
@@ -47,7 +49,9 @@ class EventBus(
     }
     
     operator fun plus(event: Event) {
-        channel.trySend(event)
+        coroutineScope.launch {
+            channel.send(event)
+        }
     }
     
     suspend fun send(event: Event) {
@@ -68,8 +72,8 @@ class EventBus(
     }
 
     companion object {
-        fun defaultFactory(): EventBus {
-            return EventBus(emptyList())
+        fun ConfigBuilder.defaultFactory(): EventBus {
+            return EventBus(coroutineScope, emptyList())
         }
     }
 }
@@ -77,13 +81,17 @@ class EventBus(
 class EventBussBuilder {
     private val interceptors = mutableListOf<(Event) -> Unit>()
 
-    fun build(): EventBus = EventBus(interceptors)
+    fun ConfigBuilder.build(): EventBus = EventBus(coroutineScope, interceptors)
 
     fun watcher(watcher: (Event) -> Unit) {
         interceptors.add(watcher)
     }
+
+    fun ConfigBuilder.coroutineScope(block: () -> CoroutineScope) {
+        coroutineScope = block()
+    }
 }
 
 fun ConfigBuilder.createEventBus(block: EventBussBuilder.() -> Unit) {
-    eventBus = EventBussBuilder().also(block).build()
+    eventBus = with(EventBussBuilder().also(block)) { build() }
 }

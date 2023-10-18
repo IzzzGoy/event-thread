@@ -3,17 +3,21 @@
  */
 package ru.alexey.event.threads
 
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import ru.alexey.event.threads.datacontainer.container
+import ru.alexey.event.threads.resources.recourses
+import kotlin.jvm.JvmInline
 import kotlin.test.*
 import kotlin.time.Duration.Companion.minutes
 
 data object TestEvent : Event
 
 data object WrongEvent : Event
+
+@JvmInline
+value class IntEvent(val number: Int) : Event
 
 class LibraryTest {
     @Test
@@ -72,7 +76,14 @@ class LibraryTest {
                     watcher {
                         println("Hello World!")
                     }
+                    watcher {
+                        println(it)
+                    }
                 }
+            }
+
+            recourses {
+
             }
 
             containers {
@@ -99,20 +110,29 @@ class LibraryTest {
                 eventThread<WrongEvent> {
                     assertIs<WrongEvent>(it)
                     this + TestEvent
-                } bind { value: Int, _ ->
+                } bind { value: Long, _ ->
                     value + 1
+                }
+                eventThread<IntEvent> {
+
+                } bind { value: String, i ->
+                    (value.toInt() + i.number).toString()
+                } bind { value: Int , i ->
+                    value + i.number
                 }
             }
         }
-
         config.eventBus + WrongEvent
 
+        config.eventBus + IntEvent(4)
         launch {
-            val dc = config.resolveOrThrow<Int>()
+            val dc = config.resolveOrThrow<String>()
             assertNotNull(dc)
-            dc.take(2).collect {
+            dc.collect {
                 println(it)
             }
         }
+
+
     }
 }
