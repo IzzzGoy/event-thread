@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.datacontainer.container
+import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.recourses
 import kotlin.jvm.JvmInline
 import kotlin.test.*
@@ -83,7 +84,9 @@ class LibraryTest {
             }
 
             recourses {
-
+                create {
+                    flowResource(1L)
+                }
             }
 
             containers {
@@ -96,7 +99,9 @@ class LibraryTest {
                     }
                 }
                 container("3")
-                container(16L) {
+
+                container {
+                    resource<Long>()
                     transform<String> { s: String, l: Long ->
                         s.toLong() * l
                     }
@@ -126,7 +131,7 @@ class LibraryTest {
 
         config.eventBus + IntEvent(4)
         launch {
-            val dc = config.resolveOrThrow<String>()
+            val dc = config.resolveOrThrow<Long>()
             assertNotNull(dc)
             dc.collect {
                 println(it)

@@ -10,7 +10,7 @@ import ru.alexey.event.threads.resources.ObservableResource
 import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
 
-inline fun<reified T: Any> ContainerBuilder.container(initial: T){
+inline fun <reified T : Any> ContainerBuilder.container(initial: T) {
 
     val innerFlow = MutableStateFlow(initial)
 
@@ -24,13 +24,15 @@ inline fun<reified T: Any> ContainerBuilder.container(initial: T){
     )
 }
 
-inline fun<reified T: Any> ContainerBuilder.container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
+inline fun <reified T : Any> ContainerBuilder.container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
 
-    var proxy: ObservableResource<T>
+    val proxy: ObservableResource<T> = flowResource(initial)
     var transforms: List<Transform<out Any, T>>
 
     DatacontainerBuilder<T>().apply(block).also {
-        proxy = it.proxy ?: flowResource(initial)
+        /*proxy = it.proxy
+            ?: initial?.let(::flowResource)
+                    ?: error("Set observable resource of type <${T::class.simpleName}> or initial value")*/
         transforms = it.transforms
     }
 
@@ -41,7 +43,7 @@ inline fun<reified T: Any> ContainerBuilder.container(initial: T, block: Datacon
     val result = trasformed.stateIn(
         scope = CoroutineScope(Dispatchers.Default),
         started = SharingStarted.Lazily,
-        initialValue = initial
+        initialValue = proxy.value
     )
 
     object : RealDataContainer<T>(result) {
@@ -49,6 +51,39 @@ inline fun<reified T: Any> ContainerBuilder.container(initial: T, block: Datacon
         override fun update(block: (T) -> T) {
             proxy.update(block)
         }
+
+        init {
+            containers.put(T::class, this as Datacontainer<T>)
+        }
+    }
+}
+
+inline fun <reified T : Any> ContainerBuilder.container(block: DatacontainerBuilder<T>.() -> Unit) {
+
+    var proxy: ObservableResource<T>
+    var transforms: List<Transform<out Any, T>>
+
+    DatacontainerBuilder<T>().apply(block).also {
+        proxy = it.proxy ?: error("Set observable resource of type <${T::class.simpleName}> or initial value")
+        transforms = it.transforms
+    }
+
+    val trasformed: Flow<T> = transforms.fold(proxy as Flow<T>) { acc, (flow, transform) ->
+        flow().combine(acc, transform)
+    }
+
+    val result = trasformed.stateIn(
+        scope = CoroutineScope(Dispatchers.Default),
+        started = SharingStarted.Lazily,
+        initialValue = proxy.value
+    )
+
+    object : RealDataContainer<T>(result) {
+
+        override fun update(block: (T) -> T) {
+            proxy.update(block)
+        }
+
         init {
             containers.put(T::class, this as Datacontainer<T>)
         }
@@ -56,19 +91,19 @@ inline fun<reified T: Any> ContainerBuilder.container(initial: T, block: Datacon
 }
 
 
-data class Transform<Other: Any, T: Any>(
+data class Transform<Other : Any, T : Any>(
     val other: () -> Flow<Other>,
     val action: suspend (@UnsafeVariance Other, @UnsafeVariance T) -> T
 )
 
-class DatacontainerBuilder<T: Any> {
+class DatacontainerBuilder<T : Any> {
 
     val transforms = mutableListOf<Transform<out Any, T>>()
 
     var proxy: ObservableResource<T>? = null
 
 
-    inline fun<reified Other: Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
+    inline fun <reified Other : Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
         val t = Transform(
             other = {
                 flow {
@@ -83,7 +118,7 @@ class DatacontainerBuilder<T: Any> {
         transforms.add(t)
     }
 
-    inline fun<reified R: Any> ScopeEventsThreadBuilder.resource() {
+    inline fun <reified R : Any> ScopeEventsThreadBuilder.resource() {
         proxy = resources.resolveObserved<R>() as? ObservableResource<T>
     }
 }

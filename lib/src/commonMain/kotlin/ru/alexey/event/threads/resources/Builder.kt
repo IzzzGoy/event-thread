@@ -10,6 +10,10 @@ class RecoursesBuilder {
     inline fun<reified T: Any> resolveObserved(): ObservableResource<T>? {
         return recourses[T::class]?.let { it() as? ObservableResource<T>  }
     }
+
+    inline fun<reified T: Any> create(noinline block: () -> Resource<T>) {
+        recourses.put(T::class, block)
+    }
 }
 
 inline fun ScopeEventsThreadBuilder.recourses(block: RecoursesBuilder.() -> Unit) {
