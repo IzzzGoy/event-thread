@@ -30,10 +30,17 @@ class TestResource(val i: Returned) : Resource<Returned> {
     }
 }
 
+
+data class Test1(val str: String) : Resource<String> {
+    override fun invoke(): String {
+        return str
+    }
+}
+
 class LibraryTest {
     @Test
     fun test() = runTest {
-        
+
         val config = eventsBuilder {
 
             config {
@@ -49,13 +56,13 @@ class LibraryTest {
                 }
             }
         }
-        
+
         config.eventBus + TestEvent
-        
+
         delay(1000)
 
     }
-    
+
     @Test
     fun test1() = runTest {
         val config = eventsBuilder {
@@ -105,12 +112,15 @@ class LibraryTest {
                 create {
                     flowResource(-15)
                 }
-                create {
+                create<String> {
                     flowResource("Str")
                 }
-                create {
+                create { params ->
                     TestResource(
-                        inject(::Returned)
+                        Returned(
+                            s = get(),
+                            m = params.resolve()
+                        )
                     )
                 }
             }
@@ -137,9 +147,10 @@ class LibraryTest {
             threads {
                 eventThread<TestEvent> {
                     println("!")
-                    resource<Returned>().also {
-                        println(it())
+                    val resource = resource<Returned> {
+                        param { 12 }
                     }
+                    println(resource())
                 }
                 eventThread<WrongEvent> {
                     assertIs<WrongEvent>(it)
@@ -151,7 +162,7 @@ class LibraryTest {
 
                 } bind { value: String, i ->
                     (value.toInt() + i.number).toString()
-                } bind { value: Int , i ->
+                } bind { value: Int, i ->
                     value + i.number
                 }
             }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import ru.alexey.event.threads.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.datacontainer.Datacontainer
+import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.RecoursesBuilder
 import ru.alexey.event.threads.resources.Resource
 import kotlin.reflect.KClass
@@ -106,6 +107,13 @@ abstract class Config {
     }
 
     inline fun<reified T: Any> ScopeEventsThreadBuilder.resource() = resources.resolve<T>()
+    inline fun<reified T: Any> ScopeEventsThreadBuilder.resource(block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
+        = resources.resolve<T>(
+            buildMap { apply(block) }
+        )
+    inline fun<reified T: Any> MutableMap<KClass<out Any>, () -> Any>.param(noinline block: () -> T) {
+        put(T::class, block)
+    }
 }
 fun eventsBuilder(block: ScopeEventsThreadBuilder.() -> Unit): Config {
     val scope = ScopeEventsThreadBuilder().also(block)

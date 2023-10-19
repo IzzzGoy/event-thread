@@ -3,6 +3,7 @@ package ru.alexey.event.threads.resources
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.reflect.KClass
 
 interface Resource<T> {
     operator fun invoke(): T
@@ -27,3 +28,5 @@ inline fun<reified T: Any> flowResource(initial: T): ObservableResource<T> {
     val source = MutableStateFlow(initial)
     return FlowResource(source)
 }
+
+typealias Parameters = Map<KClass<out Any>, () -> Any>

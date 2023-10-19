@@ -4,25 +4,38 @@ import ru.alexey.event.threads.ScopeEventsThreadBuilder
 import kotlin.reflect.KClass
 
 class RecoursesBuilder {
-    val recourses = mutableMapOf<KClass<out Any>, () -> Resource<out Any>>()
+    val recourses = mutableMapOf<KClass<out Any>, (Parameters) -> Resource<out Any>>()
 
 
-    inline fun <reified T : Any> resolveObserved(): ObservableResource<T>? {
-        return recourses[T::class]?.let { it() as? ObservableResource<T> }
+    inline fun <reified T : Any> resolveObserved(parameters: Parameters = emptyMap()): ObservableResource<T>? {
+        return recourses[T::class]?.let { it(parameters) as? ObservableResource<T> }
     }
 
-    inline fun <reified T : Any> create(noinline block: () -> Resource<T>) {
+    inline fun <reified T : Any> create(noinline block: (Parameters) -> Resource<T>) {
+        if (recourses.containsKey(T::class)) {
+            error("Overriding Resource<${T::class.simpleName}> no allowed")
+        }
         recourses.put(T::class, block)
     }
 
-    inline fun <reified T : Any> resolve(): Resource<T> {
-        return recourses[T::class]?.let { it() as? Resource<T> }
+    inline fun <reified T : Any> Parameters.resolve(): T {
+        return get(T::class)?.let { it() as T } ?: error("Param type <${T::class.simpleName}> missing")
+    }
+
+            inline fun <reified T : Any> resolve(): Resource<T> {
+        return recourses[T::class]?.let { it(emptyMap()) as? Resource<T> }
+            ?: error("Resource with type <${T::class.simpleName}> not defieend")
+    }
+    inline fun <reified T : Any> resolve(parameters: Parameters): Resource<T> {
+        return recourses[T::class]?.let { it(parameters) as? Resource<T> }
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
     }
 
     inline fun <reified T : Any> get(): T {
-        return recourses[T::class]?.let { (it() as? Resource<T>) }?.invoke()
-            ?: error("Resource with type <${T::class.simpleName}> not defieend")
+        if (!recourses.containsKey(T::class)) {
+            error("Resource with type <${T::class.simpleName}> not defieend")
+        }
+        return recourses[T::class]?.let { (it(emptyMap()) as? Resource<T>) }?.invoke()!!
     }
 
     inline fun <reified T : Any, reified A : Any> inject(block: (A) -> T): T = block(get())
