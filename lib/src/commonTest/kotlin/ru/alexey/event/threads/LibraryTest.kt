@@ -18,8 +18,15 @@ data object TestEvent : Event
 
 data object WrongEvent : Event
 
+interface Error : Event
+
 @JvmInline
 value class IntEvent(val number: Int) : Event
+
+
+data class Redirect(
+    val name: String
+) : Event
 
 
 data class Returned(val s: String, val m: Int)
@@ -36,6 +43,12 @@ data class Test1(val str: String) : Resource<String> {
         return str
     }
 }
+
+
+data object OnButtonClick: Event
+data class Kirill(
+    val name: String
+)
 
 class LibraryTest {
     @Test
@@ -97,6 +110,9 @@ class LibraryTest {
                     watcher {
                         println(it)
                     }
+                    errorWatcher<Error> {
+
+                    }
                 }
             }
 
@@ -151,7 +167,14 @@ class LibraryTest {
                         param { 12 }
                     }
                     println(resource())
+                } trigger {
+                    Redirect(it.toString())
                 }
+
+                eventThread<Redirect> {
+                    println("${it} was triggered by Redirect")
+                }
+
                 eventThread<WrongEvent> {
                     assertIs<WrongEvent>(it)
                     this + TestEvent
@@ -177,7 +200,35 @@ class LibraryTest {
                 println(it)
             }
         }
+    }
 
+    @Test
+    fun check() = runTest {
+        val config = eventsBuilder {
 
+            config {
+                createEventBus {
+
+                }
+            }
+
+            recourses {
+
+            }
+
+            containers {
+                container(Kirill("Kirill"))
+            }
+
+            threads {
+                eventThread<OnButtonClick> {
+                    println("-----------")
+                    println(it)
+                    println("-----------")
+                }
+            }
+        }
+
+        config.eventBus + OnButtonClick
     }
 }

@@ -6,9 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import ru.alexey.event.threads.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.datacontainer.Datacontainer
-import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.RecoursesBuilder
-import ru.alexey.event.threads.resources.Resource
 import kotlin.reflect.KClass
 
 class ScopeEventsThreadBuilder {
@@ -85,6 +83,18 @@ abstract class Config {
         return this
     }
 
+    inline infix fun<reified T: Event, reified OTHER: Event> EventThread<T>.trigger(
+        crossinline factory: (T) -> OTHER
+    ): EventThread<T> {
+        invoke { event ->
+            if (event is T) {
+                eventBus + factory(event)
+            }
+        }
+
+        return this
+    }
+
     inline fun<reified T: Event> eventThread(noinline action: EventBus.(Event) -> Unit) : EventThread<T> {
 
         return object : EventThread<T>() {
@@ -120,3 +130,4 @@ fun eventsBuilder(block: ScopeEventsThreadBuilder.() -> Unit): Config {
 
     return scope.config
 }
+

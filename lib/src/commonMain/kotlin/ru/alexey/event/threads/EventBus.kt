@@ -87,6 +87,17 @@ class EventBussBuilder {
         interceptors.add(watcher)
     }
 
+    fun<T: Event> errorWatcher(clazz: KClass<T>, watcher: (T) -> Unit) {
+        interceptors.add {
+            if (clazz.isInstance(it)) {
+                watcher(it as T)
+            }
+        }
+    }
+    inline fun<reified T: Event> errorWatcher(noinline watcher: (T) -> Unit) {
+        errorWatcher(T::class, watcher)
+    }
+
     fun ConfigBuilder.coroutineScope(block: () -> CoroutineScope) {
         coroutineScope = block()
     }
