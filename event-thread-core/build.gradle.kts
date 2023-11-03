@@ -16,7 +16,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/IzzzGoy/eveth-thread")
+            url = uri("https://maven.pkg.github.com/IzzzGoy/event-thread")
             credentials {
                 username = "IzzzGoy"
                 password = token
