@@ -27,7 +27,7 @@ publishing {
         register<MavenPublication>("gpr") {
             groupId = "ru.alexey.event.threads"
             artifactId = "core"
-            version = "0.0.1"
+            version = "0.0.1-dev01"
             from(components.first())
         }
     }
