@@ -10,10 +10,10 @@ plugins {
 
 val props = Properties()
 props.load(project.rootProject.file("local.properties").inputStream())
-val token = props.getProperty("token") ?: System.getProperty("token") ?: error("Missing token!")
+//val token = props.getProperty("token") ?: System.getProperty("token") ?: error("Missing token!")
 
 publishing {
-    repositories {
+    /*repositories {
         maven {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/IzzzGoy/event-thread")
@@ -22,7 +22,7 @@ publishing {
                 password = token
             }
         }
-    }
+    }*/
     publications {
         register<MavenPublication>("gpr") {
             groupId = "ru.alexey.event.threads"
