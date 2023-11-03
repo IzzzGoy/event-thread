@@ -7,7 +7,6 @@ import kotlinx.coroutines.sync.withLock
 import ru.alexey.event.threads.ContainerBuilder
 import ru.alexey.event.threads.ScopeEventsThreadBuilder
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
 
 inline fun <reified T : Any> ContainerBuilder.container(initial: T) {
