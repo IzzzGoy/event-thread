@@ -4,16 +4,16 @@ plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     kotlin("multiplatform")
     id("com.android.library")
-    id("maven-publish")
+    id("convention.publication")
 }
 
 
-val props = Properties()
+/*val props = Properties()
 props.load(project.rootProject.file("local.properties").inputStream())
-//val token = props.getProperty("token") ?: System.getProperty("token") ?: error("Missing token!")
+val token = props.getProperty("token") ?: System.getProperty("token") ?: error("Missing token!")
 
 publishing {
-    /*repositories {
+    repositories {
         maven {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/IzzzGoy/event-thread")
@@ -22,16 +22,17 @@ publishing {
                 password = token
             }
         }
-    }*/
+    }
     publications {
+
         register<MavenPublication>("gpr") {
             groupId = "ru.alexey.event.threads"
             artifactId = "core"
-            version = "0.0.1-dev01"
-            from(components.first())
+            version = "0.0.1"
+            from(components["kotlin"])
         }
     }
-}
+}*/
 
 repositories {
     // Use Maven Central for resolving dependencies.
@@ -39,11 +40,14 @@ repositories {
     google()
 }
 
+version = "0.0.1-dev02"
+group = "ru.alexey.event.threads"
 
 kotlin {
-    targetHierarchy.default()
+    applyDefaultHierarchyTemplate()
 
     androidTarget {
+        publishLibraryVariants("release")
         compilations.all {
             kotlinOptions {
                 jvmTarget = "1.8"
@@ -53,9 +57,9 @@ kotlin {
     iosX64()
     iosArm64()
     iosSimulatorArm64()
-
-    jvm()
-
+    jvm {
+        jvmToolchain(11)
+    }
     js(IR) {
         binaries.executable()
         browser {
@@ -66,10 +70,10 @@ kotlin {
             }
         }
     }
-    
+
     sourceSets {
         val commonMain by getting {
-            
+
             dependencies {
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
             }
@@ -81,7 +85,7 @@ kotlin {
             }
         }
     }
-    
+
 }
 
 android {
