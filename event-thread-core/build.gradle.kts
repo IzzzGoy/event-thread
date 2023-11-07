@@ -1,5 +1,3 @@
-import java.util.*
-
 plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     kotlin("multiplatform")
@@ -8,39 +6,13 @@ plugins {
 }
 
 
-/*val props = Properties()
-props.load(project.rootProject.file("local.properties").inputStream())
-val token = props.getProperty("token") ?: System.getProperty("token") ?: error("Missing token!")
-
-publishing {
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/IzzzGoy/event-thread")
-            credentials {
-                username = "IzzzGoy"
-                password = token
-            }
-        }
-    }
-    publications {
-
-        register<MavenPublication>("gpr") {
-            groupId = "ru.alexey.event.threads"
-            artifactId = "core"
-            version = "0.0.1"
-            from(components["kotlin"])
-        }
-    }
-}*/
-
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
     google()
 }
 
-version = "0.0.1-dev02"
+version = "0.0.1-dev03"
 group = "ru.alexey.event.threads"
 
 kotlin {
