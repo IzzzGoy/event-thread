@@ -7,17 +7,14 @@
 
 
 ```kotlin
-maven("https://maven.pkg.github.com/IzzzGoy/event-thread") {
-    credentials {
-        username = "IzzzGoy"
-        password = "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"
-    }
-}
+        maven("https://server/nexus/content/repositories/releases/")
+
 ```
 
 ```kotlin
 dependencies {
     implementation("ru.alexey.event.threads:event-thread-core:$event_thread_version")
+    implementation("ru.alexey.event.threads:event-thread-cache:$event_thread_version")
 }
 ```
 
