@@ -10,7 +10,7 @@
 maven("https://maven.pkg.github.com/IzzzGoy/event-thread") {
     credentials {
         username = "IzzzGoy"
-        password = "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"
+        password = "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"
     }
 }
 ```

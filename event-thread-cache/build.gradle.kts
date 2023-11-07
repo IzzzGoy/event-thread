@@ -6,7 +6,7 @@ plugins {
 }
 
 version = "0.0.1-dev03"
-group = "ru.alexey.event.threads.cache"
+group = "ru.alexey.event.threads"
 
 kotlin {
     applyDefaultHierarchyTemplate()

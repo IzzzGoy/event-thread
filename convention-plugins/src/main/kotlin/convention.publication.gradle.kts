@@ -56,7 +56,7 @@ publishing {
         register<MavenPublication>("gpr") {
             groupId = "ru.alexey.event.threads"
             artifactId = "event-thread-core"
-            version = "0.0.1-dev02"
+            version = "0.0.1-dev03"
             from(components["kotlin"])
         }
 
