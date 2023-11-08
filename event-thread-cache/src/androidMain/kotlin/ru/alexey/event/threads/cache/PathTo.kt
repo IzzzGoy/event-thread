@@ -4,11 +4,12 @@ import android.content.Context
 
 
 object ContextProvider {
-    var provider: () -> Context = error("Missing context")
-        private set
+    private var _provider: (() -> Context)? = null
+    val provider: () -> Context
+        get() = _provider ?: error("Missing Context")
 
     operator fun invoke(block: () -> Context) {
-        provider = block
+        _provider = block
     }
 }
 

@@ -7,8 +7,11 @@
 
 
 ```kotlin
-        maven("https://server/nexus/content/repositories/releases/")
-
+repositories {
+    //...
+    maven("https://server/nexus/content/repositories/releases/")
+    //...
+}
 ```
 
 ```kotlin
