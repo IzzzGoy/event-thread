@@ -28,7 +28,7 @@ class SecureResource<T: @Serializable Any> @OptIn(ExperimentalSerializationApi::
     }
 }
 
-@OptIn(ExperimentalSerializationApi::class)
+@OptIn(ExperimentalSerializationApi::class, InternalSerializationApi::class)
 inline fun<reified T: @Serializable Any> ResourcesBuilder.secureResource(
     key: String,
     initial: T,
@@ -36,9 +36,11 @@ inline fun<reified T: @Serializable Any> ResourcesBuilder.secureResource(
 ): ObservableResource<T> {
 
     val store = secureStore()
-    store.set(key, cbor.encodeToByteArray(initial))
+
     val source = MutableStateFlow(
-        initial
+        store.data(key)?.let {
+            cbor.decodeFromByteArray(T::class.serializer(), it)
+        } ?: initial
     )
 
     return SecureResource(

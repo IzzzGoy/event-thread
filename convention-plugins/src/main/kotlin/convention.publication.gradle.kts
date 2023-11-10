@@ -4,7 +4,6 @@ plugins {
     `maven-publish`
     signing
 }
-
 val secretPropsFile = project.rootProject.file("local.properties")
 if (secretPropsFile.exists()) {
     secretPropsFile.reader().use {
@@ -43,7 +42,7 @@ publishing {
         withType<MavenPublication> {
             groupId = "io.github.izzzgoy"
             artifactId = project.name
-            version = "0.0.1-dev04"
+            version = "0.0.1-dev05"
 
             // Stub javadoc.jar artifact
             artifact(javadocJar.get())
