@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.RecoursesBuilder
+import ru.alexey.event.threads.resources.ResourcesBuilder
 
 
 class JSONDatastoreResource<T: @Serializable Any>(
@@ -22,7 +22,7 @@ class JSONDatastoreResource<T: @Serializable Any>(
     }
 }
 
-inline fun<reified T: @Serializable Any> RecoursesBuilder.cacheJSONResource(
+inline fun<reified T: @Serializable Any> ResourcesBuilder.cacheJSONResource(
     key: String,
     scope: CoroutineScope = get(),
     default: T = get()

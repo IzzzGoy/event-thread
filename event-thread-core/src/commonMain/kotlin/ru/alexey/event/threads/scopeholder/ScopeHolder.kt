@@ -14,8 +14,16 @@ class ScopeHolder(
         scope(keyHolder.key, block)
     }
 
+    fun scoped(keyHolder: KeyHolder, block: (KeyHolder) -> Scope) {
+        scope(keyHolder.key) { block(keyHolder) }
+    }
+
     fun scope(key: String, block: () -> Scope) {
         factories[key] = block
+    }
+
+    fun scoped(key: String, block: (String) -> Scope) {
+        factories[key] = { block(key) }
     }
 
     fun load(keyHolder: KeyHolder): Scope? = load(keyHolder.key)

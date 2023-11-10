@@ -6,7 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import ru.alexey.event.threads.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.datacontainer.Datacontainer
-import ru.alexey.event.threads.resources.RecoursesBuilder
+import ru.alexey.event.threads.resources.ResourcesBuilder
 import ru.alexey.event.threads.scopeholder.KeyHolder
 import kotlin.random.Random
 import kotlin.reflect.KClass
@@ -47,7 +47,7 @@ class ScopeBuilder(
     val configs = mutableMapOf<String, ConfigBuilder.() -> Unit>()
     val containerBuilder = ContainerBuilder()
     val applied = mutableListOf<Scope.() -> Unit>()
-    val resources = RecoursesBuilder()
+    val resources = ResourcesBuilder()
 }
 class ConfigBuilder {
 

@@ -5,7 +5,7 @@ plugins {
     id("convention.publication")
 }
 
-version = "0.0.1-dev03"
+version = "0.0.1-dev04"
 group = "ru.alexey.event.threads"
 
 kotlin {

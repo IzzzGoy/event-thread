@@ -22,4 +22,5 @@ plugins {
 rootProject.name = "research"
 include("event-thread-core")
 include("event-thread-cache")
+include("event-thread-secure")
 includeBuild("convention-plugins")

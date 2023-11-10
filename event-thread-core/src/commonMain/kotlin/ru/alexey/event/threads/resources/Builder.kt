@@ -4,7 +4,7 @@ import ru.alexey.event.threads.Builder
 import ru.alexey.event.threads.ScopeBuilder
 import kotlin.reflect.KClass
 
-class RecoursesBuilder {
+class ResourcesBuilder {
     val recourses = mutableMapOf<KClass<out Any>, (Parameters) -> Resource<out Any>>()
 
 
@@ -55,7 +55,7 @@ class RecoursesBuilder {
         block(get(), get(), get(), get())
 }
 
-inline fun ScopeBuilder.recourses(crossinline block: RecoursesBuilder.() -> Unit) {
+inline fun ScopeBuilder.resources(crossinline block: ResourcesBuilder.() -> Unit) {
     resources.apply {
         block()
     }

@@ -9,7 +9,7 @@ import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.datacontainer.container
 import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
-import ru.alexey.event.threads.resources.recourses
+import ru.alexey.event.threads.resources.resources
 import kotlin.jvm.JvmInline
 import kotlin.test.*
 import kotlin.time.Duration.Companion.minutes
@@ -54,7 +54,7 @@ class LibraryTest {
     @Test
     fun test() = runTest {
 
-        val config = eventsBuilder {
+        val config = scopeBuilder {
 
             config {
                 createEventBus {
@@ -78,7 +78,7 @@ class LibraryTest {
 
     @Test
     fun test1() = runTest {
-        val config = eventsBuilder {
+        val config = scopeBuilder {
 
             threads {
                 eventThread<TestEvent> {
@@ -100,7 +100,7 @@ class LibraryTest {
         timeout = 1.minutes
     ) {
 
-        val config = eventsBuilder {
+        val config = scopeBuilder {
 
             config {
                 createEventBus {
@@ -115,23 +115,22 @@ class LibraryTest {
                     }
                 }
             }
-
-            recourses {
-                create {
+            resources {
+                register {
                     flowResource<Long>(
                         get<Double>().toLong()
                     )
                 }
-                create {
+                register {
                     flowResource<Double>(51.9)
                 }
-                create {
+                register {
                     flowResource(-15)
                 }
-                create<String> {
+                register<String> {
                     flowResource("Str")
                 }
-                create { params ->
+                register { params ->
                     TestResource(
                         Returned(
                             s = get(),
@@ -204,7 +203,7 @@ class LibraryTest {
 
     @Test
     fun check() = runTest {
-        val config = eventsBuilder {
+        val config = scopeBuilder {
 
             config {
                 createEventBus {
@@ -212,7 +211,7 @@ class LibraryTest {
                 }
             }
 
-            recourses {
+            resources {
 
             }
 
