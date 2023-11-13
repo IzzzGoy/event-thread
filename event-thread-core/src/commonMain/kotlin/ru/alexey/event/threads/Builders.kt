@@ -96,7 +96,20 @@ abstract class Scope: KeyHolder {
         return this
     }
 
-    inline infix fun<reified T: Event, reified OTHER: Event> EventThread<T>.trigger(
+    inline infix fun<reified T: Event, reified TYPE: Any> EventThread<T>.tap(noinline action: suspend EventBus.(TYPE, T) -> Unit): EventThread<T> {
+        invoke { event ->
+            if (event is T) {
+                with(eventBus) {
+                    resolve<TYPE>()?.value?.also {  type: TYPE ->
+                        this.action(type, event)
+                    }
+                }
+            }
+        }
+        return this
+    }
+
+            inline infix fun<reified T: Event, reified OTHER: Event> EventThread<T>.trigger(
         crossinline factory: suspend (T) -> OTHER
     ): EventThread<T> {
         invoke { event ->
@@ -107,6 +120,8 @@ abstract class Scope: KeyHolder {
 
         return this
     }
+
+
 
     inline fun<reified T: Event> eventThread(noinline action: suspend EventBus.(T) -> Unit) : EventThread<T> {
 

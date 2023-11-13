@@ -30,7 +30,7 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm {
-        jvmToolchain(11)
+        jvmToolchain(8)
     }
     js(IR) {
         binaries.executable()

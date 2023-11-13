@@ -8,6 +8,9 @@ version = Project.version
 group = "ru.alexey.event.threads"
 
 kotlin {
+
+    jvmToolchain(8)
+
     applyDefaultHierarchyTemplate()
     
     androidTarget {

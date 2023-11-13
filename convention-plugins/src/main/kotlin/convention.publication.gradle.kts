@@ -42,7 +42,7 @@ publishing {
         withType<MavenPublication> {
             groupId = "io.github.izzzgoy"
             artifactId = project.name
-            version = "0.0.1-dev05"
+            version = "0.0.1-dev07"
 
             // Stub javadoc.jar artifact
             artifact(javadocJar.get())

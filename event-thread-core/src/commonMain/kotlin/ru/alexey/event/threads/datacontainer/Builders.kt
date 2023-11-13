@@ -51,7 +51,8 @@ inline fun <reified T : Any> ContainerBuilder.container(initial: T, block: Datac
         }
 
         init {
-            containers.put(T::class, this as Datacontainer<T>)
+            containers[T::class] = this as Datacontainer<T>
+            result.launchIn(scope)
         }
     }
 }
@@ -87,7 +88,8 @@ inline fun <reified T : Any> ContainerBuilder.container(crossinline block: Datac
         }
 
         init {
-            containers.put(T::class, this as Datacontainer<T>)
+            containers[T::class] = this as Datacontainer<T>
+            result.launchIn(scope)
         }
     }
 }

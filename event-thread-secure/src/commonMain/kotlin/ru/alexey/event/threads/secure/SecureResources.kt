@@ -40,7 +40,9 @@ inline fun<reified T: @Serializable Any> ResourcesBuilder.secureResource(
     val source = MutableStateFlow(
         store.data(key)?.let {
             cbor.decodeFromByteArray(T::class.serializer(), it)
-        } ?: initial
+        } ?: initial.also {
+            store.set(key, cbor.encodeToByteArray(it))
+        }
     )
 
     return SecureResource(
