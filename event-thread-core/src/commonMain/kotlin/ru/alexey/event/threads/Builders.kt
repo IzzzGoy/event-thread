@@ -1,41 +1,36 @@
 package ru.alexey.event.threads
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.sync.Mutex
 import ru.alexey.event.threads.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.datacontainer.Datacontainer
-import ru.alexey.event.threads.resources.ResourcesBuilder
+import ru.alexey.event.threads.resources.ResourcesFactory
 import ru.alexey.event.threads.scopeholder.KeyHolder
+import ru.alexey.event.threads.datacontainer.ContainerBuilder
+import ru.alexey.event.threads.resources.Parameters
+import ru.alexey.event.threads.resources.Resource
+import ru.alexey.event.threads.resources.ResourceProvider
 import kotlin.random.Random
 import kotlin.reflect.KClass
 
 class ScopeBuilder(
-    private var name: String
-) {
-    fun name(block: () -> String) {
-        name = block()
-    }
+    private var name: String,
+    private val resources: ResourcesFactory = ResourcesFactory()
+) : ResourceProvider by resources {
+
 
     val scope: Scope
             by lazy {
-                ConfigBuilder().let { builder ->
-                    configs.values.forEach {
-                        builder.apply(it)
-                    }
+                with(ConfigBuilder()){
 
-                    object : Scope() {
+                    configs()
+
+                    object : Scope(resources) {
                         override val key: String = name
-                        override val eventBus: EventBus = builder.eventBus
-                        override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? {
-                            return (containerBuilder.containers[clazz])?.let { it as Datacontainer<T> }
-                        }
+                        override val eventBus: EventBus = this@with()
+                        override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
+
                         init {
                             applied.forEach {
-                                with(this) {
-                                    it()
-                                }
+                                it()
                             }
                         }
                     }.apply {
@@ -44,49 +39,65 @@ class ScopeBuilder(
                 }
             }
 
-    val configs = mutableMapOf<String, ConfigBuilder.() -> Unit>()
-    val containerBuilder = ContainerBuilder()
-    val applied = mutableListOf<Scope.() -> Unit>()
-    val resources = ResourcesBuilder()
+    private var configs: ConfigBuilder.() -> Unit = {}
+    private val containerBuilder = ContainerBuilder()
+    private val applied = mutableListOf<Scope.() -> Unit>()
+
+    @Builder
+    fun config(block: ConfigBuilder.() -> Unit) {
+        configs = block
+    }
+
+    @Builder
+    fun containers(block: ContainerBuilder.() -> Unit) {
+        containerBuilder.apply(block)
+    }
+
+    @Builder
+    fun resources(block: ResourcesFactory.() -> Unit) {
+        resources.apply(block)
+    }
+
+    @Builder
+    fun threads(block: Scope.() -> Unit) {
+        applied.add { block() }
+    }
+
+    @Builder
+    fun name(block: () -> String) {
+        name = block()
+    }
 }
+
 class ConfigBuilder {
+    private var eventBus: EventBus = defaultFactory()
+    @Builder
+    fun createEventBus(block: EventBussBuilder.() -> Unit) {
+        eventBus = with(EventBussBuilder().also(block)) { build() }
+    }
 
-    var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    var eventBus: EventBus = defaultFactory()
-}
-inline fun ScopeBuilder.config(noinline block: ConfigBuilder.() -> Unit) {
-    configs.put("config", block)
-}
-
-
-class ContainerBuilder {
-    val containers: MutableMap<KClass<out Any>, Datacontainer<out Any>>
-            = mutableMapOf()
-    val mutex = Mutex(true)
+    operator fun invoke() = eventBus
 }
 
 
-
-inline fun ScopeBuilder.containers(noinline block: ContainerBuilder.() -> Unit) {
-    containerBuilder.apply { block() }
-}
-inline fun ScopeBuilder.threads(noinline block: Scope.() -> Unit) {
-    applied.add { block() }
-}
-abstract class Scope: KeyHolder {
+abstract class Scope(
+    resources: ResourcesFactory
+) : KeyHolder, ResourceProvider by resources {
 
     abstract val eventBus: EventBus
-    abstract operator fun<T: Any> get(clazz: KClass<T>): Datacontainer<T>?
-    inline fun <reified T: Any> resolve(): Datacontainer<T>? = get(T::class)
-    inline fun <reified T: Any> resolveOrThrow(): Datacontainer<T> = get(T::class) ?: throw Exception("Container not registered")
+    abstract operator fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>?
+    inline fun <reified T : Any> resolve(): Datacontainer<T>? = get(T::class)
+    inline fun <reified T : Any> resolveOrThrow(): Datacontainer<T> =
+        get(T::class) ?: throw Exception("Container not registered")
 
     operator fun plus(event: Event) = eventBus + event
 
-    inline infix fun<reified T: Event, reified TYPE: Any> EventThread<T>.bind(noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
+    @Builder
+    inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.bind(noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
         invoke { event ->
             if (event is T) {
                 with(eventBus) {
-                    resolve<TYPE>()?.value?.let {  type: TYPE ->
+                    resolve<TYPE>()?.value?.let { type: TYPE ->
                         val new = action(type, event)
                         resolve<TYPE>()?.update { new }
                     }
@@ -96,11 +107,12 @@ abstract class Scope: KeyHolder {
         return this
     }
 
-    inline infix fun<reified T: Event, reified TYPE: Any> EventThread<T>.tap(noinline action: suspend EventBus.(TYPE, T) -> Unit): EventThread<T> {
+    @Builder
+    inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.tap(noinline action: suspend EventBus.(TYPE, T) -> Unit): EventThread<T> {
         invoke { event ->
             if (event is T) {
                 with(eventBus) {
-                    resolve<TYPE>()?.value?.also {  type: TYPE ->
+                    resolve<TYPE>()?.value?.also { type: TYPE ->
                         this.action(type, event)
                     }
                 }
@@ -109,7 +121,8 @@ abstract class Scope: KeyHolder {
         return this
     }
 
-            inline infix fun<reified T: Event, reified OTHER: Event> EventThread<T>.trigger(
+    @Builder
+    inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.trigger(
         crossinline factory: suspend (T) -> OTHER
     ): EventThread<T> {
         invoke { event ->
@@ -122,8 +135,8 @@ abstract class Scope: KeyHolder {
     }
 
 
-
-    inline fun<reified T: Event> eventThread(noinline action: suspend EventBus.(T) -> Unit) : EventThread<T> {
+    @Builder
+    inline fun <reified T : Event> eventThread(noinline action: suspend EventBus.(T) -> Unit): EventThread<T> {
 
         return object : EventThread<T>() {
             override fun close() {
@@ -144,24 +157,34 @@ abstract class Scope: KeyHolder {
         }
     }
 
-    inline fun<reified T: Event> eventThread() : EventThread<T> {
+    @Builder
+    inline fun <reified T : Event> eventThread(): EventThread<T> {
 
         return object : EventThread<T>() {
             override fun close() {
                 eventBus.unsubscribe<T>()
             }
+
             init {
                 eventBus { this }
             }
         }
     }
 
-    inline fun<reified T: Any> ScopeBuilder.resource() = resources.resolve<T>()
-    inline fun<reified T: Any> ScopeBuilder.resource(block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
-            = resources.resolve<T>(
+    inline fun <reified T : Any> resource() = resource(T::class)
+
+
+
+    fun <T: Any> resource(clazz: KClass<T>, block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
+     = resource(
+        clazz,
         buildMap { apply(block) }
     )
-    inline fun<reified T: Any> MutableMap<KClass<out Any>, () -> Any>.param(noinline block: () -> T) {
+    inline fun <reified T : Any> resource(noinline block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit) =
+        resource(T::class, block)
+
+
+    inline fun <reified T : Any> MutableMap<KClass<out Any>, () -> Any>.param(noinline block: () -> T) {
         put(T::class, block)
     }
 }

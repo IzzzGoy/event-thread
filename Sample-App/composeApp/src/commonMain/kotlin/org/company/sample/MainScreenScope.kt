@@ -4,11 +4,10 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import ru.alexey.event.threads.*
+import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJSONResource
-import ru.alexey.event.threads.datacontainer.container
 import ru.alexey.event.threads.resources.flowResource
-import ru.alexey.event.threads.resources.resources
+import ru.alexey.event.threads.scopeBuilder
 
 data object TestEvent : StrictEvent
 data object AnotherEvent : StrictEvent
@@ -35,13 +34,13 @@ fun mainScreenScope() = scopeBuilder {
 
     containers {
         container<Int> {
-            resource<Int>()
+            bindToResource()
             coroutineScope {
                 CoroutineScope(Dispatchers.IO)
             }
         }
         container<Long> {
-            resource<Long>()
+            bindToResource()
             coroutineScope {
                 CoroutineScope(Dispatchers.IO)
             }

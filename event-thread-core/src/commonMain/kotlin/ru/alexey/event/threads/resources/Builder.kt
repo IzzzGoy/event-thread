@@ -1,10 +1,9 @@
 package ru.alexey.event.threads.resources
 
 import ru.alexey.event.threads.Builder
-import ru.alexey.event.threads.ScopeBuilder
 import kotlin.reflect.KClass
 
-class ResourcesBuilder {
+class ResourcesFactory : ResourceProvider {
     val recourses = mutableMapOf<KClass<out Any>, (Parameters) -> Resource<out Any>>()
 
 
@@ -29,9 +28,19 @@ class ResourcesBuilder {
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
     }
 
+    fun <T : Any> resolve(clazz: KClass<T>): Resource<T> {
+        return recourses[clazz]?.let { it(emptyMap()) as? Resource<T> }
+            ?: error("Resource with type <${clazz.simpleName}> not defieend")
+    }
+
     inline fun <reified T : Any> resolve(parameters: Parameters): Resource<T> {
         return recourses[T::class]?.let { it(parameters) as? Resource<T> }
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
+    }
+
+    fun <T : Any> resolve(clazz: KClass<T>, parameters: Parameters): Resource<T> {
+        return recourses[clazz]?.let { it(parameters) as? Resource<T> }
+            ?: error("Resource with type <${clazz.simpleName}> not defieend")
     }
 
     inline fun <reified T : Any> get(): T {
@@ -53,10 +62,13 @@ class ResourcesBuilder {
         block: (A, B, C, D) -> T
     ): T =
         block(get(), get(), get(), get())
-}
 
-inline fun ScopeBuilder.resources(crossinline block: ResourcesBuilder.() -> Unit) {
-    resources.apply {
-        block()
+    override fun <T : Any> resource(clazz: KClass<T>): Resource<T> {
+        return resolve(clazz)
+    }
+
+    override fun <T : Any> resource(clazz: KClass<T>, parameters: Parameters): Resource<T> {
+        return resolve(clazz, parameters)
     }
 }
+

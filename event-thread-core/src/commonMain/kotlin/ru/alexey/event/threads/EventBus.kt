@@ -2,8 +2,8 @@ package ru.alexey.event.threads
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlin.reflect.KClass
-
 
 interface Event
 
@@ -100,6 +100,12 @@ class EventBus(
         }.invoke(action)
     }
 
+    fun collectToEventBus(events: Flow<Event>) {
+        coroutineScope.launch {
+            events.collect { event -> this@EventBus + event }
+        }
+    }
+
     inline fun<reified T: Event> external(noinline action: suspend (Event) -> Unit) = external(T::class, action)
 
     override fun close() {
@@ -108,23 +114,24 @@ class EventBus(
     }
 
     companion object {
-        fun ConfigBuilder.defaultFactory(): EventBus {
-            return EventBus(coroutineScope, emptyList())
+        fun defaultFactory(): EventBus {
+            return EventBus(CoroutineScope(Dispatchers.Default), emptyList())
         }
     }
-
-
 }
 
 class EventBussBuilder {
     private val interceptors = mutableListOf<suspend (Event) -> Unit>()
+    private var coroutineScope: CoroutineScope? = null
 
-    fun ConfigBuilder.build(): EventBus = EventBus(coroutineScope, interceptors)
+    fun build(): EventBus = EventBus(coroutineScope ?: CoroutineScope(Dispatchers.Default), interceptors)
 
+    @Builder
     fun watcher(watcher: (Event) -> Unit) {
         interceptors.add(watcher)
     }
 
+    @Builder
     fun<T: Event> errorWatcher(clazz: KClass<T>, watcher: suspend (T) -> Unit) {
         interceptors.add {
             if (clazz.isInstance(it)) {
@@ -132,15 +139,13 @@ class EventBussBuilder {
             }
         }
     }
+    @Builder
     inline fun<reified T: Event> errorWatcher(noinline watcher: suspend (T) -> Unit) {
         errorWatcher(T::class, watcher)
     }
 
-    fun ConfigBuilder.coroutineScope(block: () -> CoroutineScope) {
+    @Builder
+    fun coroutineScope(block: () -> CoroutineScope) {
         coroutineScope = block()
     }
-}
-
-fun ConfigBuilder.createEventBus(block: EventBussBuilder.() -> Unit) {
-    eventBus = with(EventBussBuilder().also(block)) { build() }
 }

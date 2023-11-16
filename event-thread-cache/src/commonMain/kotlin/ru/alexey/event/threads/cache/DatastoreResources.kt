@@ -5,12 +5,9 @@ import io.github.xxfast.kstore.extensions.cached
 import io.github.xxfast.kstore.utils.ExperimentalKStoreApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.flow.internal.FusibleFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.ResourcesBuilder
+import ru.alexey.event.threads.resources.ResourcesFactory
 
 
 class JSONDatastoreResource<T : @Serializable Any>(
@@ -25,7 +22,7 @@ class JSONDatastoreResource<T : @Serializable Any>(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalKStoreApi::class)
-inline fun <reified T : @Serializable Any> ResourcesBuilder.cacheJSONResource(
+inline fun <reified T : @Serializable Any> ResourcesFactory.cacheJSONResource(
     key: String,
     scope: CoroutineScope = get(),
     default: T = get()

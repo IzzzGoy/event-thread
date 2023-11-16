@@ -1,5 +1,5 @@
 
 
 object Project {
-    val version = "0.0.1-dev07"
+    val version = "0.0.1-alpha01"
 }

@@ -3,13 +3,13 @@
  */
 package ru.alexey.event.threads
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import ru.alexey.event.threads.datacontainer.container
 import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
-import ru.alexey.event.threads.resources.resources
 import kotlin.jvm.JvmInline
 import kotlin.test.*
 import kotlin.time.Duration.Companion.minutes
@@ -112,6 +112,9 @@ class LibraryTest {
                     }
                     errorWatcher<Error> {
 
+                    }
+                    coroutineScope {
+                        CoroutineScope(Dispatchers.Default)
                     }
                 }
             }

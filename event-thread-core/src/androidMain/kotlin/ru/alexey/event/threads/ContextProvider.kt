@@ -1,4 +1,4 @@
-package ru.alexey.thread
+package ru.alexey.event.threads
 
 import android.content.Context
 

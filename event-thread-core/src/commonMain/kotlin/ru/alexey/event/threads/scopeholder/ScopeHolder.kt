@@ -57,6 +57,9 @@ class ScopeHolder(
             scope + event
         }
     }
+
+    infix fun find(key: String): Scope? = active.find { it.key == key }
+    infix fun findOrLoad(key: String): Scope = find(key) ?: load(key) ?: error("Scope with name: $key not found")
 }
 
 fun scopeHolder(vararg external: Pair<KClass<out Event>, List<String>>, block: ScopeHolder.() -> Unit): ScopeHolder {
