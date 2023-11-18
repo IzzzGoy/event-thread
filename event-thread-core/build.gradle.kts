@@ -2,7 +2,8 @@ plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     kotlin("multiplatform")
     id("com.android.library")
-    id("convention.publication")
+    id("convention.publication-core")
+    checkstyle
 }
 
 
@@ -12,8 +13,8 @@ repositories {
     google()
 }
 
-version = Project.version
-group = "ru.alexey.event.threads"
+version = project.rootProject.version
+group = project.rootProject.group
 
 kotlin {
     applyDefaultHierarchyTemplate()

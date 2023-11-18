@@ -5,8 +5,8 @@ import ru.alexey.event.threads.datacontainer.Datacontainer
 import ru.alexey.event.threads.resources.ResourcesFactory
 import ru.alexey.event.threads.scopeholder.KeyHolder
 import ru.alexey.event.threads.datacontainer.ContainerBuilder
-import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.resources.Resource
+import ru.alexey.event.threads.emitter.Emitter
+import ru.alexey.event.threads.emitter.EmittersBuilder
 import ru.alexey.event.threads.resources.ResourceProvider
 import kotlin.random.Random
 import kotlin.reflect.KClass
@@ -32,6 +32,7 @@ class ScopeBuilder(
                             applied.forEach {
                                 it()
                             }
+                            emitters = emittersBuilder.build(this)
                         }
                     }.apply {
                         containerBuilder.mutex.unlock()
@@ -42,6 +43,7 @@ class ScopeBuilder(
     private var configs: ConfigBuilder.() -> Unit = {}
     private val containerBuilder = ContainerBuilder()
     private val applied = mutableListOf<Scope.() -> Unit>()
+    private val emittersBuilder = EmittersBuilder()
 
     @Builder
     fun config(block: ConfigBuilder.() -> Unit) {
@@ -67,6 +69,11 @@ class ScopeBuilder(
     fun name(block: () -> String) {
         name = block()
     }
+
+    @Builder
+    fun emitters(block: EmittersBuilder.() -> Unit) {
+        emittersBuilder.apply(block)
+    }
 }
 
 class ConfigBuilder {
@@ -85,6 +92,7 @@ abstract class Scope(
 ) : KeyHolder, ResourceProvider by resources {
 
     abstract val eventBus: EventBus
+    protected lateinit var emitters: List<Emitter<out Event>>
     abstract operator fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>?
     inline fun <reified T : Any> resolve(): Datacontainer<T>? = get(T::class)
     inline fun <reified T : Any> resolveOrThrow(): Datacontainer<T> =

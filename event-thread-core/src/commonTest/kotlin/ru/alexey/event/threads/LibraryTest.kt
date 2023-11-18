@@ -6,8 +6,11 @@ package ru.alexey.event.threads
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import ru.alexey.event.threads.emitter.Emitter
 import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
 import kotlin.jvm.JvmInline
@@ -114,7 +117,7 @@ class LibraryTest {
 
                     }
                     coroutineScope {
-                        CoroutineScope(Dispatchers.Default)
+                        this@runTest
                     }
                 }
             }
@@ -158,6 +161,14 @@ class LibraryTest {
                     resource<Long>()
                     transform<String> { s: String, l: Long ->
                         s.toLong() * l
+                    }
+                }
+            }
+
+            emitters {
+                emitter {
+                    object : Emitter<TestEvent> {
+                        override val flow: Flow<TestEvent> = flowOf(TestEvent, TestEvent, TestEvent, TestEvent)
                     }
                 }
             }

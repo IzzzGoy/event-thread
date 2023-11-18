@@ -1,11 +1,11 @@
 plugins {
     kotlin("multiplatform")
     id("com.android.library")
-    id("convention.publication")
+    id("convention.publication-secure")
 }
 
-version = Project.version
-group = "ru.alexey.event.threads"
+version = project.rootProject.version
+group = project.rootProject.group
 
 kotlin {
 

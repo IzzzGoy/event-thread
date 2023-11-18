@@ -2,11 +2,11 @@ plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     kotlin("multiplatform")
     id("com.android.library")
-    id("convention.publication")
+    id("convention.publication-cache")
 }
 
-version = Project.version
-group = "ru.alexey.event.threads"
+version = project.rootProject.version
+group = project.rootProject.group
 
 kotlin {
     applyDefaultHierarchyTemplate()
@@ -43,6 +43,8 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.0")
                 implementation(project(":event-thread-core"))
+
+                implementation("com.squareup.okio:okio:3.6.0")
             }
         }
 

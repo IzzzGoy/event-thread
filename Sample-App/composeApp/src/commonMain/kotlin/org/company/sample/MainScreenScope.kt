@@ -4,8 +4,10 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJSONResource
+import ru.alexey.event.threads.cache.cacheJsonRecourse
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.scopeBuilder
 
@@ -25,7 +27,7 @@ fun mainScreenScope() = scopeBuilder {
 
     resources {
         register {
-            cacheJSONResource("TEST", CoroutineScope(Dispatchers.IO), 16)
+            cacheJsonRecourse("TEST_NEW", 16, Json)
         }
         register {
             flowResource(120L)
@@ -41,6 +43,7 @@ fun mainScreenScope() = scopeBuilder {
         }
         container<Long> {
             bindToResource()
+            transform { other: Int, l -> other.toLong() }
             coroutineScope {
                 CoroutineScope(Dispatchers.IO)
             }

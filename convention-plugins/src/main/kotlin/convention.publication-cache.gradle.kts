@@ -1,3 +1,9 @@
+import gradle.kotlin.dsl.accessors._b6bea14fb88fd11e46d6fb1ebe601eab.ext
+import gradle.kotlin.dsl.accessors._b6bea14fb88fd11e46d6fb1ebe601eab.publishing
+import gradle.kotlin.dsl.accessors._b6bea14fb88fd11e46d6fb1ebe601eab.signing
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.bundling.Jar
+import org.gradle.kotlin.dsl.*
 import java.util.*
 
 plugins {
@@ -40,17 +46,17 @@ publishing {
     }
     publications {
         withType<MavenPublication> {
-            groupId = "io.github.izzzgoy"
+            groupId = rootProject.group.toString()
             artifactId = project.name
-            version = "0.0.1-alpha01"
+            version = rootProject.version.toString()
 
             // Stub javadoc.jar artifact
             artifact(javadocJar.get())
 
             // Provide artifacts information requited by Maven Central
             pom {
-                name.set("MPP Sample library")
-                description.set("Sample Kotlin Multiplatform library (jvm + ios + js) test")
+                name.set("Event Thead Cache")
+                description.set("Cache extension for Event Thread")
                 url.set("https://github.com/IzzzGoy/event-thread")
 
                 licenses {
