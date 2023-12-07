@@ -2,6 +2,8 @@ package ru.alexey.event.threads.scopeholder
 
 import ru.alexey.event.threads.Event
 import ru.alexey.event.threads.Scope
+import ru.alexey.event.threads.ScopeBuilder
+import ru.alexey.event.threads.scopeBuilder
 import kotlin.reflect.KClass
 
 class ScopeHolder(
@@ -15,20 +17,28 @@ class ScopeHolder(
     }
 
     fun scoped(keyHolder: KeyHolder, block: (KeyHolder) -> Scope) {
-        scope(keyHolder.key) { block(keyHolder) }
+        scope(keyHolder.key, block = { block(keyHolder) })
     }
 
     fun scope(key: String, block: () -> Scope) {
         factories[key] = block
     }
 
+    fun scopeEmbedded(key: String, init: ScopeBuilder.() -> Unit) {
+        factories[key] = {
+            scopeBuilder(key) {
+                init()
+            }
+        }
+    }
+
     fun scoped(key: String, block: (String) -> Scope) {
         factories[key] = { block(key) }
     }
 
-    fun load(keyHolder: KeyHolder): Scope? = load(keyHolder.key)
+    infix fun load(keyHolder: KeyHolder): Scope? = load(keyHolder.key)
 
-    fun load(key: String): Scope? {
+    infix fun load(key: String): Scope? {
         val scope =  factories[key]?.let {
             val scope = it()
             active += scope
@@ -44,16 +54,24 @@ class ScopeHolder(
         return scope
     }
 
-    fun free(keyHolder: KeyHolder) {
+    infix fun free(keyHolder: KeyHolder) {
         active.removeAll { it.key == keyHolder.key }
     }
 
-    fun free(key: String) {
+    infix fun free(key: String) {
         active.removeAll { it.key == key }
     }
 
     operator fun plus(event: Event) {
-        for (scope in active) {
+        val scopes: List<Scope> = external.keys.find {
+            it.isInstance(event)
+        }?.let { eventKClass ->
+            val keys = external[eventKClass] ?: emptyList()
+            active.filter { it.key in keys }
+        } ?: active
+
+
+        for (scope in scopes) {
             scope + event
         }
     }

@@ -21,6 +21,8 @@ Resource - an object that is required for the execution of certain logic. It is 
 
 Containers - contain an abstraction over certain data, their state, and the logic of interacting with them. They include StateFlow, which allows building containers on top of observable resources. If resources abstract over some data, then the container describes methods for interacting with this data. Containers can also undergo concatenation, allowing the use of one or more containers to compose the final state.
 
+Event Thread or Thread - entity, that can handle events. Contains a list of event handlers that can be triggered when using a special event.
+
 ## Installation
 
 

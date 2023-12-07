@@ -8,7 +8,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "1.6.0" apply false
 }
 
-version = "0.0.1-alpha03"
+version = "0.0.1-alpha07"
 group = "io.github.izzzgoy"
 
 repositories {

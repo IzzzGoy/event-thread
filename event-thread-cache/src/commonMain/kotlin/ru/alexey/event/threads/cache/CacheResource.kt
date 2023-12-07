@@ -17,7 +17,11 @@ class CacheResource<T : @Serializable Any>(
     private val source: MutableStateFlow<T>,
 ) : ObservableResource<T>, StateFlow<T> by source {
     override suspend fun update(block: (T) -> T) {
-        val new = block(cache.load())
+        val new = block(
+            runCatching {
+                cache.load()
+            }.getOrDefault(source.value)
+        )
         cache.write(new)
         source.emit(new)
     }
@@ -45,7 +49,7 @@ inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonRecourse(
 }
 
 @OptIn(InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonRecourse(
+inline fun<reified T: @Serializable Any> ResourcesFactory.cacheBinaryRecourse(
     key: String,
     initial: T,
     cbor: Cbor = get(),

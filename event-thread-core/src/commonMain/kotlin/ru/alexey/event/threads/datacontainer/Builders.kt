@@ -43,7 +43,7 @@ class ContainerBuilder {
         var transforms: List<Transform<out Any, T>>
         var scope: CoroutineScope
 
-        DatacontainerBuilder(T::class).apply(block).also {
+        DatacontainerBuilder(T::class).apply(block).build().also {
             transforms = it.transforms
             scope = it.coroutineScope
         }
@@ -65,7 +65,7 @@ class ContainerBuilder {
         var transforms: List<Transform<out Any, T>>
         var scope: CoroutineScope
 
-        DatacontainerBuilder(T::class).apply { block() }.also {
+        DatacontainerBuilder(T::class).apply { block() }.build().also {
             proxy = it.proxy ?: error("Set observable resource of type <${T::class.simpleName}> or initial value")
             transforms = it.transforms
             scope = it.coroutineScope
@@ -90,22 +90,40 @@ data class Transform<Other : Any, T : Any>(
     val action: suspend (@UnsafeVariance Other, @UnsafeVariance T) -> T
 )
 
+
+interface DataContainerConfig<T: Any> {
+    val transforms: List<Transform<out Any, T>>
+    val proxy: ObservableResource<T>?
+    val coroutineScope: CoroutineScope
+}
+
 class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
 
-    val transforms = mutableListOf<Transform<out Any, T>>()
+    private val transforms = mutableListOf<Transform<out Any, T>>()
 
-    var proxy: ObservableResource<T>? = null
-    var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private var proxy: ObservableResource<T>? = null
+
+    private var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+
+    fun build(): DataContainerConfig<T> {
+        val t = transforms
+        val p = proxy
+        val c = coroutineScope
+        return object : DataContainerConfig<T> {
+            override val transforms: List<Transform<out Any, T>> = t
+            override val proxy: ObservableResource<T>? = p
+            override val coroutineScope: CoroutineScope = c
+        }
+    }
 
 
-    @Builder
-    inline fun <reified Other : Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
+    fun <Other : Any>ContainerBuilder.transform(clazz: KClass<Other>, block: suspend (Other, T) -> T) {
         val cb = this
         val t = Transform(
             other = {
                 flow {
                     mutex.withLock {}
-                    cb[Other::class]?.let {
+                    cb[clazz]?.let {
                         emitAll(it)
                     }
                 }
@@ -115,13 +133,22 @@ class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
         transforms.add(t)
     }
 
+    @Builder
+    inline fun <reified Other : Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
+        transform(Other::class, block)
+    }
+
     fun coroutineScope(block: () -> CoroutineScope) {
         coroutineScope = block()
     }
 
+    fun <R : Any> ScopeBuilder.resourceLoad(clazz: KClass<R>) {
+        proxy = resource(clazz) as? ObservableResource<T> ?: error("This resource is not Observable<${clazz.simpleName}>")
+    }
+
     @Builder
     inline fun <reified R : Any> ScopeBuilder.resource() {
-        proxy = resource(R::class) as? ObservableResource<T> ?: error("This resource is not Observable<${R::class.simpleName}>")
+        resourceLoad(R::class)
     }
 
     @Builder

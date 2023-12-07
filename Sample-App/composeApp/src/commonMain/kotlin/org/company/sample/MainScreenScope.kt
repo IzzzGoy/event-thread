@@ -15,8 +15,7 @@ data object TestEvent : StrictEvent
 data object AnotherEvent : StrictEvent
 data class SetLong(val new: Long) : StrictEvent
 
-fun mainScreenScope() = scopeBuilder {
-    name { "Main" }
+fun mainScreenScope() = scopeBuilder("Main") {
     config {
         createEventBus {
             watcher {

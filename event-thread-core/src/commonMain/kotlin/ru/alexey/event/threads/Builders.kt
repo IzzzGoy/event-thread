@@ -198,9 +198,13 @@ abstract class Scope(
 }
 
 @Builder
-fun scopeBuilder(keyHolder: KeyHolder? = null, block: ScopeBuilder.() -> Unit): Scope {
+fun scopeBuilder(keyHolder: KeyHolder? = null, block: ScopeBuilder.() -> Unit): Scope =
+    scopeBuilder(keyHolder?.key, block)
+
+@Builder
+fun scopeBuilder(name: String? = null, block: ScopeBuilder.() -> Unit): Scope {
     val scope = ScopeBuilder(
-        keyHolder?.key ?: Random.Default.nextBytes(132).toString()
+        name ?: Random.Default.nextBytes(132).toString()
     ).apply { block() }
 
     return scope.scope

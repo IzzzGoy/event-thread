@@ -31,6 +31,7 @@ kotlin {
             implementation(project(":event-thread-core"))
             implementation(project(":event-thread-cache"))
             implementation(project(":event-thread-secure"))
+            implementation(project(":event-thread-compose"))
             implementation(compose.runtime)
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)

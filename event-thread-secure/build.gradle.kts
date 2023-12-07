@@ -33,6 +33,28 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.0")
 
                 implementation("io.realm.kotlin:library-base:1.12.0")
+
+                implementation("dev.whyoleg.cryptography:cryptography-core:0.2.0")
+            }
+        }
+        /*jvmMain {
+            dependencies {
+                implementation("dev.whyoleg.cryptography:cryptography-provider-jdk:0.2.0")
+            }
+        }*/
+        androidMain {
+            dependencies {
+                implementation("dev.whyoleg.cryptography:cryptography-provider-jdk:0.2.0")
+            }
+        }
+        /*jsMain {
+            dependencies {
+                implementation("dev.whyoleg.cryptography:cryptography-provider-webcrypto:0.2.0")
+            }
+        }*/
+        iosMain {
+            dependencies {
+                implementation("dev.whyoleg.cryptography:cryptography-provider-apple:0.2.0")
             }
         }
     }

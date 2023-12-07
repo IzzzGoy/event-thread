@@ -22,7 +22,7 @@ class JSONDatastoreResource<T : @Serializable Any>(
 }
 
 @OptIn(ExperimentalKStoreApi::class)
-@Deprecated(message = "Replaced by okio based solution")
+@Deprecated(message = "Replaced by okio based solution", level = DeprecationLevel.ERROR)
 inline fun <reified T : @Serializable Any> ResourcesFactory.cacheJSONResource(
     key: String,
     scope: CoroutineScope = get(),
