@@ -19,10 +19,6 @@ class ResourcesFactory : ResourceProvider {
         recourses.put(T::class, block)
     }
 
-    inline fun <reified T : Any> Parameters.resolve(): T {
-        return get(T::class)?.let { it() as T } ?: error("Param type <> missing") //error("Param type <${T::class.qualifiedName}> missing")
-    }
-
     inline fun <reified T : Any> resolve(): Resource<T> {
         return recourses[T::class]?.let { it(emptyMap()) as? Resource<T> }
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
@@ -70,5 +66,9 @@ class ResourcesFactory : ResourceProvider {
     override fun <T : Any> resource(clazz: KClass<T>, parameters: Parameters): Resource<T> {
         return resolve(clazz, parameters)
     }
+}
+
+inline fun <reified T : Any> Parameters.resolve(): T {
+    return get(T::class)?.let { it() as T } ?: error("Param type <> missing") //error("Param type <${T::class.qualifiedName}> missing")
 }
 

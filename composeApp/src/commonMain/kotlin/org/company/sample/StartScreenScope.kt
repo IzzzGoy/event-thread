@@ -3,13 +3,10 @@ package org.company.sample
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonRecourse
-import ru.alexey.event.threads.emitter.Emitter
-import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.scopeBuilder
 
 data class SetInt(val int: Int) : StrictEvent
@@ -35,9 +32,9 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
         emitter {
             wrapFlow(flowOf(Global))
         }
-        emitter {
+        /*emitter {
             wrapFlow(flowOf(SetInt(1)))
-        }
+        }*/
     }
 
     containers {
@@ -52,6 +49,9 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
     threads {
         eventThread<SetInt>() bind { state: Int, event ->
             state + event.int
+        }
+        eventThread<Counter>() bind { state: Int, _ ->
+            state + 1
         }
     }
 }

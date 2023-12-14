@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
-import ru.alexey.event.threads.cache.cacheJSONResource
 import ru.alexey.event.threads.cache.cacheJsonRecourse
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.scopeBuilder

@@ -10,6 +10,7 @@ import okio.ByteString.Companion.toByteString
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
+import okio.use
 
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -22,10 +23,14 @@ actual fun<T> jsonCache(path: String, json: Json, serializer: KSerializer<T>): C
             get() = FileSystem.SYSTEM.sink(path.toPath())
 
         override fun load(): T
-            = json.decodeFromBufferedSource(serializer, source.buffer())
+                = source.buffer().use {
+            json.decodeFromBufferedSource(serializer, it)
+        }
 
         override fun write(obj: T) {
-            json.encodeToBufferedSink(serializer, obj, sink.buffer())
+            sink.buffer().use {
+                json.encodeToBufferedSink(serializer, obj, it)
+            }
         }
     }
 }

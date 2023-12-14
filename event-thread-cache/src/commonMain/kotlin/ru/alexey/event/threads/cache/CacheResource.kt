@@ -1,6 +1,5 @@
 package ru.alexey.event.threads.cache
 
-import io.github.xxfast.kstore.KStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.InternalSerializationApi
@@ -17,11 +16,7 @@ class CacheResource<T : @Serializable Any>(
     private val source: MutableStateFlow<T>,
 ) : ObservableResource<T>, StateFlow<T> by source {
     override suspend fun update(block: (T) -> T) {
-        val new = block(
-            runCatching {
-                cache.load()
-            }.getOrDefault(source.value)
-        )
+        val new = block(cache.load())
         cache.write(new)
         source.emit(new)
     }
