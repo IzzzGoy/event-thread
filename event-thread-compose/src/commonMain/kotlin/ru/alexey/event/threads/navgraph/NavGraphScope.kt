@@ -2,11 +2,17 @@ package ru.alexey.event.threads.navgraph
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
 import ru.alexey.event.threads.ExtendableEvent
 import ru.alexey.event.threads.resources.flowResource
+import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.ScopeHolderBuilder
 
-inline fun <reified T : ExtendableEvent> ScopeHolderBuilder.navGraphScope(name: String = "Navigation") {
+inline fun <reified PUSH : NavigationDestination> ScopeHolderBuilder.navGraph(
+    name: String,
+    first: PUSH,
+    crossinline builder: NavGraphBuilder<PUSH>.() -> Unit
+) {
     scopeEmbedded(name) {
         config {
             createEventBus {
@@ -18,21 +24,35 @@ inline fun <reified T : ExtendableEvent> ScopeHolderBuilder.navGraphScope(name: 
 
         resources {
             register {
-                flowResource(NavigationStack(emptyList()))
+                valueResource(NavGraphBuilder<PUSH>().apply(builder)())
+            }
+            register {
+                flowResource(listOf<ReadyScreen>())
+            }
+        }
+
+        emitters {
+            emitter {
+                wrapFlow(flowOf(first))
             }
         }
 
         containers {
-            container<NavigationStack> {
+            container<List<ReadyScreen>> {
                 bindToResource()
-                coroutineScope { CoroutineScope(Dispatchers.Main) }
+                coroutineScope {
+                    CoroutineScope(Dispatchers.Main)
+                }
             }
         }
 
         threads {
-            /*eventThread<PushScreen>() bind { stack: NavigationStack, event ->
-                NavigationStack(stack.stack + (event.screen to event.parameters))
-            }*/
+            eventThread<PUSH>() bind { stack: List<ReadyScreen>, event ->
+                val screen = resource<NavGraph<PUSH>>().invoke().screens[event::class]?.invoke()
+                    ?: error("Missing screen with name ${event.name}")
+                screen.checkParams(event.params)
+                stack + ReadyScreen(screen, event.params)
+            }
         }
     }
 }

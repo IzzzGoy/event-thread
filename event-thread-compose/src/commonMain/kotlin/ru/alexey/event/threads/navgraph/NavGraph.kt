@@ -11,6 +11,7 @@ import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.scope
 import kotlin.jvm.JvmInline
+import kotlin.reflect.KClass
 
 
 @JvmInline
@@ -21,52 +22,9 @@ value class NavigationStack(
 typealias ReadyScreen = Pair<Screen, Parameters>
 
 
-/*
-class NavGraph(
-    private val scope: Scope,
-    private val screens: Map<String, Screen>
+
+class NavGraph<NAV: NavigationDestination>(
+    val screens: Map<KClass<out NAV>, () -> Screen>
 ) {
-    val stack = scope.resolveOrThrow<NavigationStack>()
 
-    fun push(screen: String, params: () -> Parameters) {
-        scope + PushScreen(screens[screen] ?: error("Unknown screen: $screen"), params())
-    }
-
-    fun push(preparedScreen: NavigationDestination, params: () -> Parameters) {
-        if (stack.value.stack.last().first.key == preparedScreen.name) return
-        val parameters = params()
-        preparedScreen.params.forEach {
-            require(parameters.containsKey(it)) { "Missing parameter: ${it.simpleName}" }
-        }
-        scope + PushScreen(
-            screens[preparedScreen.name] ?: error("Unknown screen: ${preparedScreen.name}"),
-            params()
-        )
-    }
 }
-
-
-
-val LocalNavGraph = staticCompositionLocalOf<NavGraph> { error("No NavGraph found") }
-
-@Composable
-fun NavGraph(startScreen: NavigationDestination, block: NavGraphBuilder.() -> Unit) {
-    val scope = LocalScope.current
-    val navGraph = remember {
-        NavGraphBuilder().apply(block)(scope)
-    }
-    navGraph.push(startScreen) { emptyMap() }
-    val screens by navGraph.stack.collectAsState()
-    CompositionLocalProvider(LocalNavGraph provides navGraph) {
-        val (screen, params) = screens.stack.last()
-        screen renderWith { params }
-    }
-}
-
-
-@Composable
-fun NavGraph(navigationScopeName: String = "Navigation", startScreen: NavigationDestination, block: NavGraphBuilder.() -> Unit) {
-    scope(navigationScopeName) {
-        NavGraph(startScreen, block)
-    }
-}*/

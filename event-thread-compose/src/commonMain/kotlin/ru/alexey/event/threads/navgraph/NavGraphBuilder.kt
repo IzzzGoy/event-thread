@@ -1,15 +1,22 @@
 package ru.alexey.event.threads.navgraph
 
-import ru.alexey.event.threads.Scope
+import kotlin.reflect.KClass
 
-/*
-class NavGraphBuilder {
-    private val screens: MutableMap<String, Screen> = mutableMapOf()
 
-    fun createScreen(builder: ScreenBuilder.() -> Unit) {
-        val screen = ScreenBuilder().apply(builder)()
-        screens[screen.key] = screen
+class NavGraphBuilder<NAV : NavigationDestination> {
+    private val screens: MutableMap<KClass<out NAV>, () -> Screen> = mutableMapOf()
+
+    fun addScreen(event: KClass<out NAV>, screen: Screen) {
+        screens[event] = { screen }
     }
 
-    operator fun invoke(scope: Scope) = NavGraph(scope, screens)
-}*/
+    inline infix fun<reified T: NAV> T.bind(builder: ScreenBuilder.() -> Unit) {
+        val screen = ScreenBuilder().apply(builder)()
+        addScreen(T::class, screen)
+    }
+
+    operator fun invoke(): NavGraph<NAV> {
+        return NavGraph(screens)
+    }
+}
+

@@ -1,10 +1,23 @@
 package org.company.sample
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import ru.alexey.event.threads.Event
+import ru.alexey.event.threads.navgraph.NavigationDestination
+import ru.alexey.event.threads.navgraph.navGraph
+import ru.alexey.event.threads.resources.flowResource
+import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
 
 
@@ -49,4 +62,51 @@ fun provideScopeHolder() = scopeHolder {
             }
         }
     }
+
+    scopeEmbedded("StartScreenWidget") {
+        config {
+            createEventBus {
+                coroutineScope {
+                    CoroutineScope(Dispatchers.Main)
+                }
+            }
+        }
+
+        resources {
+            register {
+                flowResource("test")
+            }
+        }
+
+        containers {
+            container<String> {
+                bindToResource()
+            }
+        }
+    }
+
+    navGraph<OuterNavigationDestination>("Navigation", StartScreen) {
+        StartScreen bind {
+            registerWidget<String>("StartScreenWidget") {
+                Text(it)
+            }
+
+            content {
+                Column(
+                    modifier = Modifier.fillMaxSize().background(Color.Red),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    it["StartScreenWidget"]?.Content()
+                }
+            }
+        }
+    }
+}
+
+
+sealed interface OuterNavigationDestination : NavigationDestination
+
+data object StartScreen : OuterNavigationDestination {
+    override val name: String = "StartScreen"
 }

@@ -1,6 +1,7 @@
 package ru.alexey.event.threads.navgraph
 
 import androidx.compose.runtime.Composable
+import ru.alexey.event.threads.ListBuilder
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.scope
@@ -8,11 +9,13 @@ import ru.alexey.event.threads.widget.Widget
 import ru.alexey.event.threads.widget.createWidget
 import ru.alexey.event.threads.widget.widget
 import kotlin.random.Random
+import kotlin.reflect.KClass
 
 class ScreenBuilder {
     private val widgets: MutableMap<String, Widget> = mutableMapOf()
     private var content: @Composable Parameters.(Map<String, Widget>) -> Unit = {}
     private var key: String = Random.nextBytes(32).decodeToString()
+    private val required: MutableList<KClass<out Any>> = mutableListOf()
 
     fun registerWidget(name: String, block: () -> Widget) {
         widgets[name] = block()
@@ -70,13 +73,28 @@ class ScreenBuilder {
         this.key = block()
     }
 
-    operator fun invoke() = Screen(widgets, content, key)
+    fun require(required: KClass<out Any>) {
+        this.required.add(required)
+    }
+
+    fun require(required: List<KClass<out Any>>) {
+        this.required.addAll(required)
+    }
+
+    fun require(block: ListBuilder<KClass<out Any>>.() -> Unit) {
+        this.required.addAll(
+            ListBuilder<KClass<out Any>>().apply(block).invoke()
+        )
+    }
+
+    operator fun invoke() = Screen(required, widgets, content, key)
 }
 
 
 
 
 class Screen(
+    private val required: List<KClass<out Any>>,
     private val widgets: Map<String, Widget>,
     private val content: @Composable Parameters.(Map<String, Widget>) -> Unit,
     val key: String
@@ -85,6 +103,12 @@ class Screen(
         return key.compareTo(other.key)
     }
 
+    fun checkParams(params: Parameters) {
+        require(params.size == this.required.size) { "Incorrect number of params" }
+        params.keys.forEach {
+            require(it in this.required) { "Incorrect param type! Expect: ${it.simpleName}" }
+        }
+    }
     @Composable operator fun invoke(parameters: () -> Parameters) {
         with(parameters()) {
             content(widgets)

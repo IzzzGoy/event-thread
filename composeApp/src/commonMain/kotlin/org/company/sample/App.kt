@@ -13,6 +13,7 @@ import org.company.sample.theme.AppTheme
 import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.ScopeHolder
+import ru.alexey.event.threads.navgraph.ReadyScreen
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.widget.createWidget
 
@@ -39,15 +40,11 @@ internal fun App() = AppTheme {
     ScopeHolder(::provideScopeHolder) {
         val holder = LocalScopeHolder.current
 
-        startWidget.Content()
+        val navigation = holder.findOrLoad("Navigation")
+        val screen by navigation.resolveOrThrow<List<ReadyScreen>>().collectAsState()
 
-        scope("Global") {
-            LaunchedEffect(Unit) {
-                repeat(5) {
-                    delay(300)
-                    holder + Global
-                }
-            }
+        screen.lastOrNull()?.let { (current, params) ->
+            current renderWith { params }
         }
     }
 }
