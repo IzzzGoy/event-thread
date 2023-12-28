@@ -4,19 +4,25 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
+import io.ktor.http.parameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import ru.alexey.event.threads.Event
+import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.navgraph.NavigationDestination
+import ru.alexey.event.threads.navgraph.PopUp
 import ru.alexey.event.threads.navgraph.navGraph
+import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.flowResource
+import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
 
@@ -81,14 +87,23 @@ fun provideScopeHolder() = scopeHolder {
         containers {
             container<String> {
                 bindToResource()
+                watcher {
+                    Logger.d("STATE_CONTAINER") { it }
+                }
             }
         }
     }
 
     navGraph<OuterNavigationDestination>("Navigation", StartScreen) {
-        StartScreen bind {
-            registerWidget<String>("StartScreenWidget") {
+        StartScreen::class bind {
+            registerWidget<String>("StartScreenWidget") { it, modifier ->
                 Text(it)
+                val holder = LocalScopeHolder.current
+                Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
+                    Text(
+                        "Click"
+                    )
+                }
             }
 
             content {
@@ -97,7 +112,23 @@ fun provideScopeHolder() = scopeHolder {
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    it["StartScreenWidget"]?.Content()
+                    it["StartScreenWidget"]?.Content(Modifier)
+                }
+            }
+        }
+        SecondScreen::class bind {
+            require {
+                String::class()
+            }
+            content {
+                Column(
+                    modifier = Modifier.fillMaxSize().background(Color.Blue),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(this@content.resolve<String>())
+                    val holder = LocalScopeHolder.current
+                    Button(onClick = { holder + PopUp }) { Text("Click") }
                 }
             }
         }
@@ -109,4 +140,10 @@ sealed interface OuterNavigationDestination : NavigationDestination
 
 data object StartScreen : OuterNavigationDestination {
     override val name: String = "StartScreen"
+}
+
+data class SecondScreen(
+    override val params: Parameters
+) : OuterNavigationDestination {
+    override val name: String = "SecondScreen"
 }

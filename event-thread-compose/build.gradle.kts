@@ -39,6 +39,7 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(compose.runtime)
+                implementation(compose.ui)
                 implementation(project(":event-thread-core"))
             }
         }

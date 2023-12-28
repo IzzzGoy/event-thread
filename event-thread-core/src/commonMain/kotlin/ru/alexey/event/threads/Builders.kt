@@ -102,7 +102,7 @@ abstract class Scope(
 
     @Builder
     inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.bind(noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
-        invoke { event ->
+        invoke(EventType.modification) { event ->
             if (event is T) {
                 with(eventBus) {
                     resolve<TYPE>()?.value?.let { type: TYPE ->
@@ -117,7 +117,7 @@ abstract class Scope(
 
     @Builder
     inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.tap(noinline action: suspend EventBus.(TYPE, T) -> Unit): EventThread<T> {
-        invoke { event ->
+        invoke(EventType.process) { event ->
             if (event is T) {
                 with(eventBus) {
                     resolve<TYPE>()?.value?.also { type: TYPE ->
@@ -133,7 +133,7 @@ abstract class Scope(
     inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.trigger(
         crossinline factory: suspend (T) -> OTHER
     ): EventThread<T> {
-        invoke { event ->
+        invoke(EventType.cascade) { event ->
             if (event is T) {
                 eventBus + factory(event)
             }
@@ -153,7 +153,7 @@ abstract class Scope(
 
             init {
                 val eventBus = eventBus
-                invoke {
+                invoke(EventType.consume) {
                     if (it is T) {
                         with(eventBus) {
                             action(it)

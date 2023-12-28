@@ -1,6 +1,7 @@
 package ru.alexey.event.threads.navgraph
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import ru.alexey.event.threads.ListBuilder
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.resolve
@@ -25,29 +26,29 @@ class ScreenBuilder {
         widgets[name] = widget
     }
 
-    inline fun registerWidget(name: String, crossinline content: @Composable () -> Unit) {
+    inline fun registerWidget(name: String, crossinline content: @Composable (modifier: Modifier) -> Unit) {
         registerWidget(name, block = {
             object : Widget {
                 override val name: String = name
                 @Composable
-                override fun Content() {
+                override fun Content(modifier: Modifier) {
                     scope(name) {
-                        content()
+                        content(modifier)
                     }
                 }
             }
         })
     }
 
-    inline fun<reified T : Any> registerWidget(name: String, crossinline content: @Composable (T) -> Unit) {
+    inline fun<reified T : Any> registerWidget(name: String, crossinline content: @Composable (T, Modifier) -> Unit) {
         registerWidget(name, block = {
             object : Widget {
                 override val name: String = name
                 @Composable
-                override fun Content() {
+                override fun Content(modifier: Modifier) {
                     scope(name) {
                         widget(T::class) {
-                            content(it)
+                            content(it, modifier)
                         }
                     }
                 }

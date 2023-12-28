@@ -3,6 +3,7 @@ package ru.alexey.event.threads.widget
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.scope
 import kotlin.reflect.KClass
@@ -11,16 +12,16 @@ interface Widget {
     val name: String
 
     @Composable
-    fun Content()
+    fun Content(modifier: Modifier)
 }
 
-inline fun <reified T : Any> createWidget(name: String, crossinline block: @Composable (T) -> Unit) = object : Widget {
+inline fun <reified T : Any> createWidget(name: String, crossinline block: @Composable (T, Modifier) -> Unit) = object : Widget {
     override val name: String = name
     @Composable
-    override fun Content() {
+    override fun Content(modifier: Modifier) {
         scope(name) {
             widget(T::class) {
-                block(it)
+                block(it, modifier)
             }
         }
     }

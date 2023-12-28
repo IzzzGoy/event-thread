@@ -19,6 +19,9 @@ class EventBus(
     private val channel: Channel<Event> = Channel()
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
 
+    val metadata
+        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventTypes }.toMap()
+
     fun unsubscribe(clazz: KClass<out Event>) {
         subscribers.remove(clazz)
     }
@@ -97,7 +100,7 @@ class EventBus(
                     this@EventBus.invoke(clazz) { this }
                 }
             }
-        }.invoke(action)
+        }.invoke(EventType.external, action)
     }
 
     fun collectToEventBus(events: Flow<Event>) {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import ru.alexey.event.threads.Builder
 import ru.alexey.event.threads.ScopeBuilder
 import ru.alexey.event.threads.foldAndStateWithProxy
+import ru.alexey.event.threads.foldAndStateWithProxyAndWatchers
 import ru.alexey.event.threads.resources.ObservableResource
 import ru.alexey.event.threads.resources.flowResource
 import kotlin.reflect.KClass
@@ -42,14 +43,16 @@ class ContainerBuilder {
         val proxy: ObservableResource<T> = flowResource(initial)
         var transforms: List<Transform<out Any, T>>
         var scope: CoroutineScope
+        var watchers: List<(T) -> Unit>
 
         DatacontainerBuilder(T::class).apply(block).build().also {
             transforms = it.transforms
             scope = it.coroutineScope
+            watchers = it.watchers
         }
 
         realDataContainer(
-            flow = transforms.foldAndStateWithProxy(proxy, scope),
+            flow = transforms.foldAndStateWithProxyAndWatchers(proxy, watchers, scope),
             scope = scope
         ) {
             scope.launch {
@@ -64,14 +67,18 @@ class ContainerBuilder {
         var proxy: ObservableResource<T>
         var transforms: List<Transform<out Any, T>>
         var scope: CoroutineScope
+        var watchers = listOf<(T) -> Unit>()
+
+        //(resource(T::class) as? ObservableResource<T>)?.also { proxy = it }
 
         DatacontainerBuilder(T::class).apply { block() }.build().also {
             proxy = it.proxy ?: error("Set observable resource of type <${T::class.simpleName}> or initial value")
             transforms = it.transforms
             scope = it.coroutineScope
+            watchers = it.watchers
         }
 
-        realDataContainer(transforms.foldAndStateWithProxy(proxy, scope), scope) { it: (T) -> T ->
+        realDataContainer(transforms.foldAndStateWithProxyAndWatchers(proxy, watchers, scope), scope) { it: (T) -> T ->
             scope.launch {
                 proxy.update(it)
             }
@@ -95,6 +102,7 @@ interface DataContainerConfig<T: Any> {
     val transforms: List<Transform<out Any, T>>
     val proxy: ObservableResource<T>?
     val coroutineScope: CoroutineScope
+    val watchers: List<(T) -> Unit>
 }
 
 class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
@@ -105,15 +113,23 @@ class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
 
     private var coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
+    private val watchers = mutableListOf<(T) -> Unit>()
+
     fun build(): DataContainerConfig<T> {
         val t = transforms
         val p = proxy
         val c = coroutineScope
+        val w = watchers
         return object : DataContainerConfig<T> {
             override val transforms: List<Transform<out Any, T>> = t
             override val proxy: ObservableResource<T>? = p
             override val coroutineScope: CoroutineScope = c
+            override val watchers: List<(T) -> Unit> = w
         }
+    }
+
+    fun watcher(watcher: (T) -> Unit) {
+        watchers.add(watcher)
     }
 
 

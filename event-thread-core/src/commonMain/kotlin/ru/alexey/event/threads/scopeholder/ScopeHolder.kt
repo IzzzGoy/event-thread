@@ -14,6 +14,10 @@ class ScopeHolder(
 
     private val active: MutableSet<Scope> = mutableSetOf()
 
+    val activeMetadata
+        get() =  active.map { it.key to it.eventBus.metadata }.toMap()
+    val allMetadata
+        get() = factories.map { it.key to it.value().eventBus.metadata }.toMap()
     private fun loadInternal(key: String): Scope? {
         return factories[key]?.let {
             it()
@@ -21,7 +25,11 @@ class ScopeHolder(
             active += scope
             external.forEach { (k, receivers) ->
                 scope.eventBus.external(k) { event ->
-                    active.filter { s -> s.key in receivers && scope.key !in receivers }.forEach { it + event }
+                    active.filter { s ->
+                        s.key in receivers && scope.key !in receivers
+                    }.forEach {
+                        it + event
+                    }
                 }
             }
         }?.also {

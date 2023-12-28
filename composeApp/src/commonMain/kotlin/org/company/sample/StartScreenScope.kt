@@ -43,6 +43,9 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
             coroutineScope {
                 CoroutineScope(Dispatchers.Main.immediate)
             }
+            watcher {
+                Logger.d("STATE_START") { it.toString() }
+            }
         }
     }
 

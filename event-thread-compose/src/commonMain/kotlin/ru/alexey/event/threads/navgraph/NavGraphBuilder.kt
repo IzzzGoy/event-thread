@@ -10,7 +10,7 @@ class NavGraphBuilder<NAV : NavigationDestination> {
         screens[event] = { screen }
     }
 
-    inline infix fun<reified T: NAV> T.bind(builder: ScreenBuilder.() -> Unit) {
+    inline infix fun<reified T: NAV> KClass<T>.bind(builder: ScreenBuilder.() -> Unit) {
         val screen = ScreenBuilder().apply(builder)()
         addScreen(T::class, screen)
     }

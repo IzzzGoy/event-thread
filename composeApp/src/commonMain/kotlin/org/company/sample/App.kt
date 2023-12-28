@@ -8,17 +8,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import co.touchlab.kermit.Logger
 import kotlinx.coroutines.delay
 import org.company.sample.theme.AppTheme
 import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.ScopeHolder
+import ru.alexey.event.threads.navgraph.NavGraph
 import ru.alexey.event.threads.navgraph.ReadyScreen
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.widget.createWidget
 
 
-val startWidget = createWidget<Int>("StartScreen") {
+val startWidget = createWidget<Int>("StartScreen") { it, modifier ->
     val scope = LocalScope.current
     Box(
         modifier = Modifier
@@ -35,17 +37,8 @@ val startWidget = createWidget<Int>("StartScreen") {
 
 @Composable
 internal fun App() = AppTheme {
-
-
     ScopeHolder(::provideScopeHolder) {
-        val holder = LocalScopeHolder.current
-
-        val navigation = holder.findOrLoad("Navigation")
-        val screen by navigation.resolveOrThrow<List<ReadyScreen>>().collectAsState()
-
-        screen.lastOrNull()?.let { (current, params) ->
-            current renderWith { params }
-        }
+        NavGraph("Navigation")
     }
 }
 

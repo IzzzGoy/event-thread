@@ -6,8 +6,8 @@ import ru.alexey.event.threads.resources.Parameters
 import kotlin.reflect.KClass
 
 
-internal open class PopToScreen(private val screen: Screen?): StrictEvent
-internal object PopUp : PopToScreen(null)
+open class PopToScreen(val screen: Screen?): StrictEvent
+object PopUp : PopToScreen(null)
 
 interface NavigationDestination : ExtendableEvent {
     val name: String
