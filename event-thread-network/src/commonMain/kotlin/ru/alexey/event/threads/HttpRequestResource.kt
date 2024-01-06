@@ -11,7 +11,9 @@ import io.ktor.client.statement.HttpResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.serialization.Serializable
+import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.ResourceProvider
+import ru.alexey.event.threads.resources.valueResource
 
 object HttpRequestResource {
     inline fun <reified T : @Serializable Any> ResourceProvider.get(
@@ -19,12 +21,14 @@ object HttpRequestResource {
         httpClient: HttpClient = resource(HttpClient::class)(),
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit
-    ): ResponseWrapper<T> {
-        return object : ResponseWrapper<T> {
-            override suspend fun unwrap() = coroutineScope.async {
-                httpClient.get(url, block).body<T>()
-            }.await()
-        }
+    ): Resource<ResponseWrapper<T>> {
+        return valueResource(
+            object : ResponseWrapper<T> {
+                override suspend fun unwrap() = coroutineScope.async {
+                    httpClient.get(url, block).body<T>()
+                }.await()
+            }
+        )
     }
 
     inline fun <reified T : @Serializable Any> ResourceProvider.post(
@@ -32,12 +36,14 @@ object HttpRequestResource {
         httpClient: HttpClient = resource(HttpClient::class)(),
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit
-    ): ResponseWrapper<T> {
-        return object : ResponseWrapper<T> {
-            override suspend fun unwrap() = coroutineScope.async {
-                httpClient.post(url, block).body<T>()
-            }.await()
-        }
+    ): Resource<ResponseWrapper<T>> {
+        return valueResource(
+            object : ResponseWrapper<T> {
+                override suspend fun unwrap() = coroutineScope.async {
+                    httpClient.post(url, block).body<T>()
+                }.await()
+            }
+        )
     }
 
     inline fun <reified T : @Serializable Any> ResourceProvider.delete(
@@ -45,12 +51,14 @@ object HttpRequestResource {
         httpClient: HttpClient = resource(HttpClient::class)(),
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit
-    ): ResponseWrapper<T> {
-        return object : ResponseWrapper<T> {
-            override suspend fun unwrap() = coroutineScope.async {
-                httpClient.delete(url, block).body<T>()
-            }.await()
-        }
+    ): Resource<ResponseWrapper<T>> {
+        return valueResource(
+            object : ResponseWrapper<T> {
+                override suspend fun unwrap() = coroutineScope.async {
+                    httpClient.delete(url, block).body<T>()
+                }.await()
+            }
+        )
     }
 
     inline fun <reified T : @Serializable Any> ResourceProvider.put(
@@ -58,11 +66,13 @@ object HttpRequestResource {
         httpClient: HttpClient = resource(HttpClient::class)(),
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit
-    ): ResponseWrapper<T> {
-        return object : ResponseWrapper<T> {
-            override suspend fun unwrap() = coroutineScope.async {
-                httpClient.put(url, block).body<T>()
-            }.await()
-        }
+    ): Resource<ResponseWrapper<T>> {
+        return valueResource(
+            object : ResponseWrapper<T> {
+                override suspend fun unwrap() = coroutineScope.async {
+                    httpClient.put(url, block).body<T>()
+                }.await()
+            }
+        )
     }
 }
