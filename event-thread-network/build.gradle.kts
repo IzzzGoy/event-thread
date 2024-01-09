@@ -49,6 +49,7 @@ kotlin {
             dependencies {
                 implementation(project(":event-thread-core"))
                 implementation("io.ktor:ktor-client-core:3.0.0-beta-1")
+                implementation("io.ktor:ktor-client-resources:3.0.0-beta-1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.0.0-beta-1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0-beta-1")
                 implementation("io.ktor:ktor-client-websockets:3.0.0-beta-1")
