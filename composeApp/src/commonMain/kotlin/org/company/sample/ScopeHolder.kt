@@ -15,8 +15,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.Event
 import ru.alexey.event.threads.LocalScopeHolder
+import ru.alexey.event.threads.StrictEvent
+import ru.alexey.event.threads.cache.cacheJsonRecourse
+import ru.alexey.event.threads.cache.pathToJSON
 import ru.alexey.event.threads.navgraph.NavigationDestination
 import ru.alexey.event.threads.navgraph.PopUp
 import ru.alexey.event.threads.navgraph.navGraph
@@ -25,11 +30,15 @@ import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
+import kotlin.random.Random
 
 
 data object Global : Event
 data object Counter : Event
 
+data class SetString(val str: String) : StrictEvent
+
+@OptIn(ExperimentalStdlibApi::class)
 fun provideScopeHolder() = scopeHolder {
 
     Global::class consume "Global"
@@ -80,7 +89,15 @@ fun provideScopeHolder() = scopeHolder {
 
         resources {
             register {
-                flowResource("test")
+                Logger.d("PATH") { pathToJSON("test") }
+                cacheJsonRecourse("test", "Test", Json { prettyPrint = true })
+            }
+        }
+
+        emitters {
+            emitter {
+
+                wrapFlow(flowOf(SetString(Random.Default.nextBytes(16).toHexString())))
             }
         }
 
@@ -90,6 +107,12 @@ fun provideScopeHolder() = scopeHolder {
                 watcher {
                     Logger.d("STATE_CONTAINER") { it }
                 }
+            }
+        }
+
+        threads {
+            eventThread<SetString>() bind { state: String, event ->
+                event.str
             }
         }
     }

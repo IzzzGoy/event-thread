@@ -17,13 +17,12 @@ import okio.use
 
 @OptIn(ExperimentalSerializationApi::class)
 actual fun<T> jsonCache(path: String, json: Json, serializer: KSerializer<T>): Cache<T> {
-    val actualPath = path.toPath()
     return object : Cache<T> {
         private val source
-            get() = FileSystem.SYSTEM.source(actualPath)
+            get() = FileSystem.SYSTEM.source(path.toPath())
 
         private val sink
-            get() = FileSystem.SYSTEM.sink(actualPath)
+            get() = FileSystem.SYSTEM.sink(path.toPath(), false)
 
         override fun load(): T
             = source.buffer().use {

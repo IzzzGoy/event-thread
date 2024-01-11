@@ -20,7 +20,7 @@ actual fun<T> jsonCache(path: String, json: Json, serializer: KSerializer<T>): C
             get() = FileSystem.SYSTEM.source(path.toPath())
 
         private val sink
-            get() = FileSystem.SYSTEM.sink(path.toPath())
+            get() = FileSystem.SYSTEM.sink(path.toPath(), false)
 
         override fun load(): T
                 = source.buffer().use {
