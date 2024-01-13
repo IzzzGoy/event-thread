@@ -44,7 +44,7 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.0")
                 implementation(project(":event-thread-core"))
 
-                implementation("com.squareup.okio:okio:3.6.0")
+                api("com.squareup.okio:okio:3.6.0")
             }
         }
 

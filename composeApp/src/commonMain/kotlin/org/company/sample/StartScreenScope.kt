@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
-import ru.alexey.event.threads.cache.cacheJsonRecourse
+import ru.alexey.event.threads.cache.cacheJsonResource
 import ru.alexey.event.threads.scopeBuilder
 
 data class SetInt(val int: Int) : StrictEvent
@@ -24,7 +24,7 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
     }
     resources {
         register {
-            cacheJsonRecourse("int", 1, Json)
+            cacheJsonResource("int", 1, Json)
         }
     }
 

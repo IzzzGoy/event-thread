@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
-import ru.alexey.event.threads.cache.cacheJsonRecourse
+import ru.alexey.event.threads.cache.cacheJsonResource
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.scopeBuilder
 
@@ -25,7 +25,7 @@ fun mainScreenScope() = scopeBuilder("Main") {
 
     resources {
         register {
-            cacheJsonRecourse("TEST_NEW", 16, Json)
+            cacheJsonResource("TEST_NEW", 16, Json)
         }
         register {
             flowResource(120L)

@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
-import io.ktor.http.parameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -20,15 +19,13 @@ import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.Event
 import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.StrictEvent
-import ru.alexey.event.threads.cache.cacheJsonRecourse
+import ru.alexey.event.threads.cache.cacheJsonResource
 import ru.alexey.event.threads.cache.pathToJSON
 import ru.alexey.event.threads.navgraph.NavigationDestination
 import ru.alexey.event.threads.navgraph.PopUp
 import ru.alexey.event.threads.navgraph.navGraph
 import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.resolve
-import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import kotlin.random.Random
 
@@ -90,7 +87,7 @@ fun provideScopeHolder() = scopeHolder {
         resources {
             register {
                 Logger.d("PATH") { pathToJSON("test") }
-                cacheJsonRecourse("test", "Test", Json { prettyPrint = true })
+                cacheJsonResource("test", "Test", Json { prettyPrint = true })
             }
         }
 

@@ -16,14 +16,17 @@ class CacheResource<T : @Serializable Any>(
     private val source: MutableStateFlow<T>,
 ) : ObservableResource<T>, StateFlow<T> by source {
     override suspend fun update(block: (T) -> T) {
-        val new = block(cache.load())
-        cache.write(new)
-        source.emit(new)
+        runCatching {
+            block(cache.load())
+        }.onSuccess { new ->
+            cache.write(new)
+            source.emit(new)
+        }
     }
 }
 
 @OptIn(InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonRecourse(
+inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonResource(
     key: String,
     initial: T,
     json: Json = get(),
@@ -34,9 +37,11 @@ inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonRecourse(
         json = json,
         serializer = serializer
     )
-    val real = runCatching { cache.load() }
-        .onFailure { cache.write(initial) }
-        .getOrDefault(initial)
+    val real = runCatching {
+        cache.load()
+    }.onFailure {
+        cache.write(initial)
+    }.getOrDefault(initial)
     val source = MutableStateFlow(real)
     return CacheResource<T>(
         cache, source
@@ -44,7 +49,7 @@ inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonRecourse(
 }
 
 @OptIn(InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.cacheBinaryRecourse(
+inline fun<reified T: @Serializable Any> ResourcesFactory.cacheBinaryResource(
     key: String,
     initial: T,
     cbor: Cbor = get(),

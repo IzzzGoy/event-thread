@@ -4,47 +4,47 @@ import ru.alexey.event.threads.Builder
 import kotlin.reflect.KClass
 
 class ResourcesFactory : ResourceProvider {
-    val recourses = mutableMapOf<KClass<out Any>, (Parameters) -> Resource<out Any>>()
+    val resources = mutableMapOf<KClass<out Any>, (Parameters) -> Resource<out Any>>()
 
 
     inline fun <reified T : Any> resolveObserved(parameters: Parameters = emptyMap()): ObservableResource<T>? {
-        return recourses[T::class]?.let { it(parameters) as? ObservableResource<T> }
+        return resources[T::class]?.let { it(parameters) as? ObservableResource<T> }
     }
 
     @Builder
     inline fun <reified T : Any> register(noinline block: (Parameters) -> Resource<T>) {
-        if (recourses.containsKey(T::class)) {
+        if (resources.containsKey(T::class)) {
             error("Overriding Resource<${T::class.simpleName}> no allowed")
         }
-        recourses.put(T::class, block)
+        resources.put(T::class, block)
     }
 
     inline fun <reified T : Any> resolve(): Resource<T> {
-        return recourses[T::class]?.let { it(emptyMap()) as? Resource<T> }
+        return resources[T::class]?.let { it(emptyMap()) as? Resource<T> }
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
     }
 
     fun <T : Any> resolve(clazz: KClass<T>): Resource<T> {
-        return recourses[clazz]?.let { it(emptyMap()) as? Resource<T> }
+        return resources[clazz]?.let { it(emptyMap()) as? Resource<T> }
             ?: error("Resource with type <${clazz.simpleName}> not defieend")
     }
 
     inline fun <reified T : Any> resolve(parameters: Parameters): Resource<T> {
-        return recourses[T::class]?.let { it(parameters) as? Resource<T> }
+        return resources[T::class]?.let { it(parameters) as? Resource<T> }
             ?: error("Resource with type <${T::class.simpleName}> not defieend")
     }
 
     fun <T : Any> resolve(clazz: KClass<T>, parameters: Parameters): Resource<T> {
-        return recourses[clazz]?.let { it(parameters) as? Resource<T> }
+        return resources[clazz]?.let { it(parameters) as? Resource<T> }
             ?: error("Resource with type <${clazz.simpleName}> not defieend")
     }
 
     inline fun <reified T : Any> get(): T {
-        if (!recourses.containsKey(T::class)) {
+        if (!resources.containsKey(T::class)) {
             error("Resource with type <${T::class.simpleName}> not defieend")
         }
 
-        return recourses[T::class]?.let { (it(emptyMap()) as? Resource<T>) }?.invoke()!!
+        return resources[T::class]?.let { (it(emptyMap()) as? Resource<T>) }?.invoke()!!
     }
 
     inline fun <reified T : Any, reified A : Any> inject(block: (A) -> T): T = block(get())
