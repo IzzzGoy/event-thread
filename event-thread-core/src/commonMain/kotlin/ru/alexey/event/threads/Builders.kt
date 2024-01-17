@@ -183,18 +183,15 @@ abstract class Scope(
 
 
 
-    fun <T: Any> resource(clazz: KClass<T>, block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
+    fun <T: Any> resource(name: String? = null,  clazz: KClass<T>, block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
      = resource(
-        clazz,
+         clazz,
+        name ?: clazz.simpleName.orEmpty(),
         buildMap { apply(block) }
-    )
-    inline fun <reified T : Any> resource(noinline block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit) =
-        resource(T::class, block)
+     )
+    inline fun <reified T : Any> resource(name: String? = null, noinline block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit) =
+        resource(name, T::class, block)
 
-
-    inline fun <reified T : Any> MutableMap<KClass<out Any>, () -> Any>.param(noinline block: () -> T) {
-        put(T::class, block)
-    }
 }
 
 @Builder

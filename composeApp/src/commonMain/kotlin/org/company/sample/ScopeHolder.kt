@@ -25,7 +25,10 @@ import ru.alexey.event.threads.navgraph.NavigationDestination
 import ru.alexey.event.threads.navgraph.PopUp
 import ru.alexey.event.threads.navgraph.navGraph
 import ru.alexey.event.threads.resources.Parameters
+import ru.alexey.event.threads.resources.invoke
+import ru.alexey.event.threads.resources.param
 import ru.alexey.event.threads.resources.resolve
+import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import kotlin.random.Random
 
@@ -93,7 +96,6 @@ fun provideScopeHolder() = scopeHolder {
 
         emitters {
             emitter {
-
                 wrapFlow(flowOf(SetString(Random.Default.nextBytes(16).toHexString())))
             }
         }

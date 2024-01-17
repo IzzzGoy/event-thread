@@ -3,8 +3,6 @@
  */
 package ru.alexey.event.threads
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -13,9 +11,17 @@ import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.emitter.Emitter
 import ru.alexey.event.threads.resources.Resource
 import ru.alexey.event.threads.resources.flowResource
+import ru.alexey.event.threads.resources.invoke
+import ru.alexey.event.threads.resources.param
+import ru.alexey.event.threads.resources.resolve
+import ru.alexey.event.threads.resources.resource
+import ru.alexey.event.threads.resources.valueResource
 import kotlin.jvm.JvmInline
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 data object TestEvent : Event
 
@@ -55,9 +61,9 @@ data class Kirill(
 
 class LibraryTest {
     @Test
-    fun test() = runTest {
+    fun test() = runTest(timeout = 10.seconds) {
 
-        val config = scopeBuilder {
+        val config = scopeBuilder("Test") {
 
             config {
                 createEventBus {
@@ -66,22 +72,45 @@ class LibraryTest {
                     }
                 }
             }
+            val testString by resource {
+                valueResource("Hello World!")
+            }
+            val anotherString by resource {
+               println(it.resolve<Int>())
+                valueResource("I said ${testString()}")
+            }
+
+            /*resources {
+                val testString by registerDelegate {
+                    valueResource("Hello World!")
+                }
+
+                val anotherString by registerDelegate {
+                    valueResource("I said ${testString()}")
+                }
+            }*/
+
             threads {
                 eventThread<TestEvent> {
-                    assertSame(TestEvent, it)
+                    //val res = anotherString()
+                    //println(res)
+                    val res1 = anotherString {
+                        param { 125 }
+                    }
+                    println(res1)
                 }
             }
         }
 
         config.eventBus + TestEvent
 
-        delay(1000)
+        delay(100000)
 
     }
 
     @Test
     fun test1() = runTest {
-        val config = scopeBuilder {
+        val config = scopeBuilder("") {
 
             threads {
                 eventThread<TestEvent> {
@@ -103,7 +132,7 @@ class LibraryTest {
         timeout = 1.minutes
     ) {
 
-        val config = scopeBuilder {
+        val config = scopeBuilder("") {
 
             config {
                 createEventBus {
@@ -185,7 +214,7 @@ class LibraryTest {
                 }
 
                 eventThread<Redirect> {
-                    println("${it} was triggered by Redirect")
+                    println("$it was triggered by Redirect")
                 }
 
                 eventThread<WrongEvent> {
@@ -217,7 +246,7 @@ class LibraryTest {
 
     @Test
     fun check() = runTest {
-        val config = scopeBuilder {
+        val config = scopeBuilder("") {
 
             config {
                 createEventBus {
@@ -245,3 +274,4 @@ class LibraryTest {
         config.eventBus + OnButtonClick
     }
 }
+
