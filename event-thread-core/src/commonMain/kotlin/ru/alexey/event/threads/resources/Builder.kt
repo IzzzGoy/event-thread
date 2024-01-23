@@ -105,6 +105,13 @@ inline fun <reified T : Any> resource(noinline block: (Parameters) -> Resource<T
     }
 }
 
+@Builder
+inline fun <reified T : Any> observable(noinline block: (Parameters) -> ObservableResource<T>): ReadOnlyProperty<Any?, (Parameters) -> ObservableResource<T>> {
+    return ReadOnlyProperty<Any?, (Parameters) -> ObservableResource<T>> { thisRef, property ->
+        block
+    }
+}
+
 inline fun <reified T : Any> Parameters.resolve(): T {
     return get(T::class)?.let { it() as T }
         ?: error("Param type <> missing") //error("Param type <${T::class.qualifiedName}> missing")
@@ -115,9 +122,14 @@ inline fun <reified T : Any> MutableMap<KClass<out Any>, () -> Any>.param(noinli
 }
 
 
-inline operator fun <reified T : Any> ((Parameters) -> Resource<T>).invoke(noinline parameters: MutableMap<KClass<out Any>, () -> Any>.() -> Unit = {}): T
+inline operator fun <reified T : Any> ((Parameters) -> Resource<T>).invoke(noinline parameters: MutableMap<KClass<out Any>, () -> Any>.() -> Unit = {}): Resource<T>
         = this(
     buildMap {
         apply(parameters)
-        println(this)
-    })()
+    })
+
+inline operator fun <reified T : Any> ((Parameters) -> ObservableResource<T>).invoke(noinline parameters: MutableMap<KClass<out Any>, () -> Any>.() -> Unit = {}): ObservableResource<T>
+        = this(
+    buildMap {
+        apply(parameters)
+    })

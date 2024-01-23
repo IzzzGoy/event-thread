@@ -3,11 +3,17 @@ package ru.alexey.event.threads.resources
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
+import kotlin.reflect.KProperty
 
 
-interface Resource<T> {
+interface Resource<T>: ReadOnlyProperty<Any?, T> {
     operator fun invoke(): T
+
+    override fun getValue(thisRef: Any?, property: KProperty<*>): T {
+        return invoke()
+    }
 }
 
 

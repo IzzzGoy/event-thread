@@ -73,11 +73,11 @@ class LibraryTest {
                 }
             }
             val testString by resource {
-                valueResource("Hello World!")
+                flowResource("Hello World!")
             }
-            val anotherString by resource {
-               println(it.resolve<Int>())
-                valueResource("I said ${testString()}")
+            val anotherString by ru.alexey.event.threads.resources.observable {
+                val testValue by testString()
+                flowResource("I said $testValue")
             }
 
             /*resources {
@@ -89,6 +89,11 @@ class LibraryTest {
                     valueResource("I said ${testString()}")
                 }
             }*/
+            containers {
+                container(source = anotherString()) {
+
+                }
+            }
 
             threads {
                 eventThread<TestEvent> {
@@ -97,14 +102,16 @@ class LibraryTest {
                     val res1 = anotherString {
                         param { 125 }
                     }
-                    println(res1)
+                    println(res1())
                 }
             }
         }
 
         config.eventBus + TestEvent
 
-        delay(100000)
+        config.resolveOrThrow<String>().collect {
+            println("TEST: $it")
+        }
 
     }
 

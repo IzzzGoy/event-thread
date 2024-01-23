@@ -84,6 +84,24 @@ class ContainerBuilder {
             }
         }
     }
+
+    inline fun<reified T: Any> container(source: ObservableResource<T>, block: DatacontainerBuilder<T>.() -> Unit) {
+        var transforms: List<Transform<out Any, T>>
+        var scope: CoroutineScope
+        var watchers: List<(T) -> Unit>
+
+        DatacontainerBuilder(T::class).apply { block() }.build().also {
+            transforms = it.transforms
+            scope = it.coroutineScope
+            watchers = it.watchers
+        }
+
+        realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { it: (T) -> T ->
+            scope.launch {
+                source.update(it)
+            }
+        }
+    }
 }
 
 
