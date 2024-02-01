@@ -2,19 +2,16 @@ package ru.alexey.event.threads
 
 import ru.alexey.event.threads.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.datacontainer.Datacontainer
-import ru.alexey.event.threads.resources.ResourcesFactory
 import ru.alexey.event.threads.scopeholder.KeyHolder
 import ru.alexey.event.threads.datacontainer.ContainerBuilder
 import ru.alexey.event.threads.emitter.Emitter
 import ru.alexey.event.threads.emitter.EmittersBuilder
-import ru.alexey.event.threads.resources.ResourceProvider
 import kotlin.random.Random
 import kotlin.reflect.KClass
 
 class ScopeBuilder(
     private var name: String,
-    private val resources: ResourcesFactory = ResourcesFactory()
-) : ResourceProvider by resources {
+) {
 
 
     val scope: Scope
@@ -23,7 +20,7 @@ class ScopeBuilder(
 
                     configs()
 
-                    object : Scope(resources) {
+                    object : Scope() {
                         override val key: String = name
                         override val eventBus: EventBus = this@with()
                         override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
@@ -41,7 +38,7 @@ class ScopeBuilder(
             }
 
     private var configs: ConfigBuilder.() -> Unit = {}
-    private val containerBuilder = ContainerBuilder()
+    val containerBuilder = ContainerBuilder()
     private val applied = mutableListOf<Scope.() -> Unit>()
     private val emittersBuilder = EmittersBuilder()
 
@@ -53,11 +50,6 @@ class ScopeBuilder(
     @Builder
     fun containers(block: ContainerBuilder.() -> Unit) {
         containerBuilder.apply(block)
-    }
-
-    @Builder
-    fun resources(block: ResourcesFactory.() -> Unit) {
-        resources.apply(block)
     }
 
     @Builder
@@ -87,9 +79,7 @@ class ConfigBuilder {
 }
 
 
-abstract class Scope(
-    resources: ResourcesFactory
-) : KeyHolder, ResourceProvider by resources {
+abstract class Scope() : KeyHolder {
 
     abstract val eventBus: EventBus
     protected lateinit var emitters: List<Emitter<out Event>>
@@ -142,6 +132,33 @@ abstract class Scope(
         return this
     }
 
+    @Builder
+    inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.then(
+        crossinline factory: suspend (T) -> OTHER
+    ): EventThread<T> {
+        invoke(EventType.cascade) { event ->
+            if (event is T) {
+                eventBus + factory(event)
+            }
+        }
+        return this
+    }
+
+    @Builder
+    inline fun <reified T : Event, reified TYPE : Any> EventThread<T>.then(datacontainer: Datacontainer<TYPE>, noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
+        invoke(EventType.modification) { event ->
+            if (event is T) {
+                with(eventBus) {
+                    val new = action(datacontainer.value, event)
+                    datacontainer.update {
+                        new
+                    }
+                }
+            }
+        }
+        return this
+    }
+
 
     @Builder
     inline fun <reified T : Event> eventThread(noinline action: suspend EventBus.(T) -> Unit): EventThread<T> {
@@ -179,18 +196,18 @@ abstract class Scope(
         }
     }
 
-    inline fun <reified T : Any> resource() = resource(T::class)
+    //inline fun <reified T : Any> resource() = resource(T::class)
 
 
 
-    fun <T: Any> resource(name: String? = null,  clazz: KClass<T>, block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
+    /*fun <T: Any> resource(name: String? = null,  clazz: KClass<T>, block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit)
      = resource(
          clazz,
         name ?: clazz.simpleName.orEmpty(),
         buildMap { apply(block) }
      )
     inline fun <reified T : Any> resource(name: String? = null, noinline block: MutableMap<KClass<out Any>, () -> Any>.() -> Unit) =
-        resource(name, T::class, block)
+        resource(name, T::class, block)*/
 
 }
 

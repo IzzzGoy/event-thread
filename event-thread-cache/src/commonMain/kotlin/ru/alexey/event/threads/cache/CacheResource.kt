@@ -8,7 +8,6 @@ import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.ResourcesFactory
 
 
 class CacheResource<T : @Serializable Any>(
@@ -26,10 +25,10 @@ class CacheResource<T : @Serializable Any>(
 }
 
 @OptIn(InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonResource(
+inline fun<reified T: @Serializable Any> cacheJsonResource(
     key: String,
     initial: T,
-    json: Json = get(),
+    json: Json,
 ): ObservableResource<T> {
     val serializer = T::class.serializer()
     val cache = jsonCache(
@@ -49,10 +48,10 @@ inline fun<reified T: @Serializable Any> ResourcesFactory.cacheJsonResource(
 }
 
 @OptIn(InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.cacheBinaryResource(
+inline fun<reified T: @Serializable Any> cacheBinaryResource(
     key: String,
     initial: T,
-    cbor: Cbor = get(),
+    cbor: Cbor,
 ): ObservableResource<T> {
     val serializer = T::class.serializer()
     val cache = binaryCache(

@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonResource
+import ru.alexey.event.threads.datacontainer.datacontainer
+import ru.alexey.event.threads.resources.invoke
+import ru.alexey.event.threads.resources.observable
 import ru.alexey.event.threads.scopeBuilder
 
 data class SetInt(val int: Int) : StrictEvent
@@ -22,9 +25,16 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
             }
         }
     }
-    resources {
-        register {
-            cacheJsonResource("int", 1, Json)
+
+    val intResource by observable {
+        cacheJsonResource("int", 1, Json)
+    }
+    val intDatacontainer by datacontainer(intResource()) {
+        coroutineScope {
+            CoroutineScope(Dispatchers.Main.immediate)
+        }
+        watcher {
+            Logger.d("STATE_START") { it.toString() }
         }
     }
 
@@ -32,28 +42,13 @@ fun provideStartScreenScope(name: String) = scopeBuilder(name) {
         emitter {
             wrapFlow(flowOf(Global))
         }
-        /*emitter {
-            wrapFlow(flowOf(SetInt(1)))
-        }*/
-    }
-
-    containers {
-        container<Int> {
-            bindToResource()
-            coroutineScope {
-                CoroutineScope(Dispatchers.Main.immediate)
-            }
-            watcher {
-                Logger.d("STATE_START") { it.toString() }
-            }
-        }
     }
 
     threads {
-        eventThread<SetInt>() bind { state: Int, event ->
+        eventThread<SetInt>().then(intDatacontainer) { state: Int, event ->
             state + event.int
         }
-        eventThread<Counter>() bind { state: Int, _ ->
+        eventThread<Counter>().then(intDatacontainer) { state: Int, _ ->
             state + 1
         }
     }

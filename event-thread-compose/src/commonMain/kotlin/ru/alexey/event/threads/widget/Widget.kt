@@ -13,6 +13,9 @@ interface Widget {
 
     @Composable
     fun Content(modifier: Modifier)
+
+    @Composable
+    operator fun invoke(modifier: Modifier) = Content(modifier)
 }
 
 inline fun <reified T : Any> createWidget(name: String, crossinline block: @Composable (T, Modifier) -> Unit) = object : Widget {

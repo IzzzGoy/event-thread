@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import ru.alexey.event.threads.resources.ObservableResource
+import kotlin.properties.ReadOnlyProperty
 
 
 interface Datacontainer<T> : StateFlow<T> {
@@ -18,12 +19,12 @@ abstract class RealDataContainer<T>(
 
 
 inline fun<reified T: Any> ContainerBuilder.realDataContainer(
-    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: suspend ((T) -> T) -> Unit
+    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: ((T) -> T) -> Unit
 ) = object : RealDataContainer<T>(
     flow
 ) {
 
-    override suspend fun update(block: (T) -> T) {
+    override suspend fun update(block:  (T) -> T) {
         innerUpdate(block)
     }
 
@@ -32,5 +33,7 @@ inline fun<reified T: Any> ContainerBuilder.realDataContainer(
         launchIn(scope)
     }
 }
+
+
 
 

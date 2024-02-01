@@ -12,6 +12,7 @@ import ru.alexey.event.threads.foldAndStateWithProxy
 import ru.alexey.event.threads.foldAndStateWithProxyAndWatchers
 import ru.alexey.event.threads.resources.ObservableResource
 import ru.alexey.event.threads.resources.flowResource
+import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 
 
@@ -102,8 +103,38 @@ class ContainerBuilder {
             }
         }
     }
+
+
 }
 
+
+inline fun<reified T: Any> ScopeBuilder.datacontainer(
+    source: ObservableResource<T>,
+    crossinline block: DatacontainerBuilder<T>.() -> Unit
+) = ReadOnlyProperty<Any?, Datacontainer<T>> { thisRef, property ->
+    val container = containerBuilder[T::class]
+    if (container == null) {
+        var transforms: List<Transform<out Any, T>>
+        var scope: CoroutineScope
+        var watchers: List<(T) -> Unit>
+
+        DatacontainerBuilder(T::class).apply { block() }.build().also {
+            transforms = it.transforms
+            scope = it.coroutineScope
+            watchers = it.watchers
+        }
+        with(containerBuilder) {
+            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { it: (T) -> T ->
+                scope.launch {
+                    source.update(it)
+                }
+            }
+        }
+    }  else {
+        container
+    }
+
+}
 
 
 
@@ -172,21 +203,32 @@ class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
         transform(Other::class, block)
     }
 
+    @Builder
+    fun <Other : Any> transform(otherContainer: Datacontainer<Other>, block: suspend (Other, T) -> T) {
+        val t = Transform(
+            other = {
+                otherContainer
+            },
+            action = block
+        )
+        transforms.add(t)
+    }
+
     fun coroutineScope(block: () -> CoroutineScope) {
         coroutineScope = block()
     }
 
-    fun <R : Any> ScopeBuilder.resourceLoad(clazz: KClass<R>) {
+/*    fun <R : Any> ScopeBuilder.resourceLoad(clazz: KClass<R>) {
         proxy = resource(clazz) as? ObservableResource<T> ?: error("This resource is not Observable<${clazz.simpleName}>")
-    }
+    }*/
 
-    @Builder
+ /*   @Builder
     inline fun <reified R : Any> ScopeBuilder.resource() {
         resourceLoad(R::class)
-    }
+    }*/
 
-    @Builder
+/*    @Builder
     fun ScopeBuilder.bindToResource() {
         proxy = resource(clazz) as? ObservableResource<T> ?: error("This resource is not Observable<${clazz.simpleName}>")
-    }
+    }*/
 }

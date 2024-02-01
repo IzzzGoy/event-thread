@@ -8,8 +8,10 @@ import kotlinx.coroutines.IO
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonResource
+import ru.alexey.event.threads.datacontainer.datacontainer
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.invoke
+import ru.alexey.event.threads.resources.observable
 import ru.alexey.event.threads.resources.param
 import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.resources.valueResource
@@ -28,42 +30,35 @@ fun mainScreenScope() = scopeBuilder("Main") {
         }
     }
 
-    resources {
-        register {
-            cacheJsonResource("TEST_NEW", 16, Json)
-        }
-        register {
-            flowResource(120L)
+    val longResource by observable {
+        flowResource(120L)
+    }
+
+    val intResource by observable {
+        cacheJsonResource("TEST_NEW", 16, Json)
+    }
+
+    val intContainer by datacontainer(intResource()) {
+        coroutineScope {
+            CoroutineScope(Dispatchers.IO)
         }
     }
 
-    containers {
-        container<Int> {
-            bindToResource()
-            coroutineScope {
-                CoroutineScope(Dispatchers.IO)
-            }
-        }
-        container<Long> {
-            bindToResource()
-            transform { other: Int, l -> other.toLong() }
-            coroutineScope {
-                CoroutineScope(Dispatchers.IO)
-            }
+    val longContainer by datacontainer(longResource()) {
+        transform(otherContainer = intContainer) { other: Int, l -> other.toLong() }
+        coroutineScope {
+            CoroutineScope(Dispatchers.IO)
         }
     }
 
     threads {
-        eventThread<TestEvent>() bind { state: Int, event ->
+        eventThread<TestEvent>().then(intContainer) { state, event ->
             12
         }
         eventThread<AnotherEvent> {
-            Logger.d("DEFAULT") { resource<Int>()().toString() }
-        } tap {state: Int, event ->
-            Logger.d("TAP") { state.toString() }
-            this + SetLong(state.toLong())
+            Logger.d("DEFAULT") { intResource().toString() }
         }
-        eventThread<SetLong>() bind { state: Long, event ->
+        eventThread<SetLong>().then(longContainer) { state, event ->
             event.new
         }
     }

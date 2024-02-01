@@ -21,13 +21,17 @@ import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonResource
 import ru.alexey.event.threads.cache.pathToJSON
+import ru.alexey.event.threads.datacontainer.datacontainer
 import ru.alexey.event.threads.navgraph.NavigationDestination
 import ru.alexey.event.threads.navgraph.PopUp
 import ru.alexey.event.threads.navgraph.navGraph
+import ru.alexey.event.threads.navgraph.widget
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.resources.invoke
+import ru.alexey.event.threads.resources.observable
 import ru.alexey.event.threads.resources.param
 import ru.alexey.event.threads.resources.resolve
+import ru.alexey.event.threads.resources.resource
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import kotlin.random.Random
@@ -37,6 +41,22 @@ data object Global : Event
 data object Counter : Event
 
 data class SetString(val str: String) : StrictEvent
+
+val jsonResource by resource {
+    valueResource(Json { prettyPrint = true })
+}
+
+val intResource by observable {
+    cacheJsonResource("test", "Test", jsonResource()())
+}
+
+val startScreenWidget by widget<String> { it, modifier ->
+    Text(it)
+    val holder = LocalScopeHolder.current
+    Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
+        Text("Click")
+    }
+}
 
 @OptIn(ExperimentalStdlibApi::class)
 fun provideScopeHolder() = scopeHolder {
@@ -78,7 +98,7 @@ fun provideScopeHolder() = scopeHolder {
         }
     }
 
-    scopeEmbedded("StartScreenWidget") {
+    scopeEmbedded(startScreenWidget.name) {
         config {
             createEventBus {
                 coroutineScope {
@@ -87,10 +107,13 @@ fun provideScopeHolder() = scopeHolder {
             }
         }
 
-        resources {
-            register {
-                Logger.d("PATH") { pathToJSON("test") }
-                cacheJsonResource("test", "Test", Json { prettyPrint = true })
+
+        val intContainer by datacontainer(intResource()) {
+            coroutineScope {
+                CoroutineScope(Dispatchers.Main)
+            }
+            watcher {
+                Logger.d("STATE_CONTAINER") { it }
             }
         }
 
@@ -100,41 +123,22 @@ fun provideScopeHolder() = scopeHolder {
             }
         }
 
-        containers {
-            container<String> {
-                bindToResource()
-                watcher {
-                    Logger.d("STATE_CONTAINER") { it }
-                }
-            }
-        }
-
         threads {
-            eventThread<SetString>() bind { state: String, event ->
-                event.str
+            eventThread<SetString>().then(intContainer) { _: String, setString: SetString ->
+                setString.str
             }
         }
     }
 
     navGraph<OuterNavigationDestination>("Navigation", StartScreen) {
         StartScreen::class bind {
-            registerWidget<String>("StartScreenWidget") { it, modifier ->
-                Text(it)
-                val holder = LocalScopeHolder.current
-                Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
-                    Text(
-                        "Click"
-                    )
-                }
-            }
-
             content {
                 Column(
                     modifier = Modifier.fillMaxSize().background(Color.Red),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    it["StartScreenWidget"]?.Content(Modifier)
+                    startScreenWidget(Modifier)
                 }
             }
         }

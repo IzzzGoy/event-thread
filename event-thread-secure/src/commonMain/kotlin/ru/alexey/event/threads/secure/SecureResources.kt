@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.*
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.ResourcesFactory
 import kotlin.reflect.KClass
 import kotlinx.serialization.cbor.Cbor
 
@@ -29,10 +28,10 @@ class SecureResource<T: @Serializable Any> @OptIn(ExperimentalSerializationApi::
 }
 
 @OptIn(ExperimentalSerializationApi::class, InternalSerializationApi::class)
-inline fun<reified T: @Serializable Any> ResourcesFactory.secureResource(
+inline fun<reified T: @Serializable Any> secureResource(
     key: String,
     initial: T,
-    cbor: Cbor = get()
+    cbor: Cbor
 ): ObservableResource<T> {
 
     val store = secureStore()

@@ -7,7 +7,7 @@ import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
-class ResourcesFactory : ResourceProvider {
+/*class ResourcesFactory : ResourceProvider {
     val resources = mutableMapOf<KClass<out Any>, Map<String, (Parameters) -> Resource<out Any>>>()
     val metadata = resources.map { entry ->
         entry.key::simpleName.toString() to entry.value.map {
@@ -60,7 +60,7 @@ class ResourcesFactory : ResourceProvider {
         return resources[T::class]?.get(name ?: T::class.simpleName.orEmpty())?.let { (it(emptyMap()) as? Resource<T>) }?.invoke()!!
     }
 
-    /*inline fun <reified T : Any, reified A : Any> inject(block: (A) -> T): T = block(get())
+    *//*inline fun <reified T : Any, reified A : Any> inject(block: (A) -> T): T = block(get())
     inline fun <reified T : Any, reified A : Any, reified B : Any> inject(block: (A, B) -> T): T =
         block(get(), get())
 
@@ -70,7 +70,7 @@ class ResourcesFactory : ResourceProvider {
     inline fun <reified T : Any, reified A : Any, reified B : Any, reified C : Any, reified D : Any> inject(
         block: (A, B, C, D) -> T
     ): T =
-        block(get(), get(), get(), get())*/
+        block(get(), get(), get(), get())*//*
 
 
     override fun <T : Any> resource(clazz: KClass<T>, name: String): Resource<T> {
@@ -96,7 +96,7 @@ class ResourcesFactory : ResourceProvider {
     ): ObservableResource<T> {
         return resolve(name, clazz, parameters) as? ObservableResource<T> ?: error("Resource<$clazz>[$name] is not observable")
     }
-}
+}*/
 
 @Builder
 inline fun <reified T : Any> resource(noinline block: (Parameters) -> Resource<T>): ReadOnlyProperty<Any?, (Parameters) -> Resource<T>> {

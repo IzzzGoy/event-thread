@@ -6,7 +6,6 @@ import io.realm.kotlin.types.RealmObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.ResourcesFactory
 import kotlin.jvm.JvmInline
 import kotlin.random.Random
 import kotlin.reflect.KClass
@@ -47,9 +46,9 @@ class SecureRealm<R : RealmObject, T : WrappedList<R>>(
     }
 }
 
-inline fun <reified R : RealmObject, reified T : WrappedList<R>> ResourcesFactory.secureDatabase(
-    realm: Realm = get(),
-    scope: CoroutineScope = get()
+inline fun <reified R : RealmObject, reified T : WrappedList<R>> secureDatabase(
+    realm: Realm,
+    scope: CoroutineScope
 ): ObservableResource<T> {
     val source: StateFlow<T> = realm.query(clazz = R::class).find().asFlow().map {
         it.list.wrap() as T
