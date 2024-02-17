@@ -164,12 +164,8 @@ fun provideScopeHolder() = scopeHolder {
 
 sealed interface OuterNavigationDestination : NavigationDestination
 
-data object StartScreen : OuterNavigationDestination {
-    override val name: String = "StartScreen"
-}
+data object StartScreen : OuterNavigationDestination
 
 data class SecondScreen(
     override val params: Parameters
-) : OuterNavigationDestination {
-    override val name: String = "SecondScreen"
-}
+) : OuterNavigationDestination
