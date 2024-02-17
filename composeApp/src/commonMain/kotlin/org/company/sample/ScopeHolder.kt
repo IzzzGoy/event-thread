@@ -53,7 +53,14 @@ val intResource by observable {
 val startScreenWidget by widget<String> { it, modifier ->
     Text(it)
     val holder = LocalScopeHolder.current
-    Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
+    Button(onClick = {
+        holder + SecondScreen(
+            mapOf(
+                String::class to { "Hello world" }
+            )
+        )
+    }
+    ) {
         Text("Click")
     }
 }
@@ -119,7 +126,15 @@ fun provideScopeHolder() = scopeHolder {
 
         emitters {
             emitter {
-                wrapFlow(flowOf(SetString(Random.Default.nextBytes(16).toHexString())))
+                wrapFlow(
+                    flow {
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                        delay(1000)
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                        delay(1000)
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                    }
+                )
             }
         }
 
