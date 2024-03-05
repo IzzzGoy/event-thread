@@ -1,3 +1,5 @@
+@file:Suppress("UNCHECKED_CAST")
+
 package ru.alexey.event.threads
 
 import kotlinx.coroutines.*
@@ -20,7 +22,7 @@ class EventBus(
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
 
     val metadata
-        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventTypes }.toMap()
+        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventMetadatas }.toMap()
 
     fun unsubscribe(clazz: KClass<out Event>) {
         subscribers.remove(clazz)
@@ -53,7 +55,9 @@ class EventBus(
                         is ExtendableEvent -> {
                             for ((key, value) in subscribers.entries) {
                                 if (key.isInstance(event)) {
-                                    value.actions.forEach { it(event) }
+                                    value.actions.forEach {
+                                        it(event)
+                                    }
                                 }
                             }
                         }
@@ -89,7 +93,7 @@ class EventBus(
         invoke(T::class, action)
     }
 
-    fun<T: Event> external(clazz: KClass<T>, action: suspend (Event) -> Unit) {
+    fun<T: Event> external(clazz: KClass<T>, block: suspend EventThreadActionBuilder<T>.(T) -> Unit) {
         subscribers.getOrPut(clazz) {
             object : EventThread<T>() {
                 override fun close() {
@@ -100,7 +104,14 @@ class EventBus(
                     this@EventBus.invoke(clazz) { this }
                 }
             }
-        }.invoke(EventType.external, action)
+        }.invoke(EventType.external) {
+            action { event ->
+                val t = this as EventThreadActionBuilder<T>
+                with(t) {
+                    block(event as T)
+                }
+            }
+        }
     }
 
     fun collectToEventBus(events: Flow<Event>) {
@@ -109,7 +120,9 @@ class EventBus(
         }
     }
 
-    inline fun<reified T: Event> external(noinline action: suspend (Event) -> Unit) = external(T::class, action)
+    inline fun<reified T: Event> external(
+        noinline action: suspend EventThreadActionBuilder<T>.(T) -> Unit
+    ) = external(T::class, action)
 
     override fun close() {
         subscribers.values.forEach(EventThread<*>::close)

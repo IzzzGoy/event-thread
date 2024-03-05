@@ -55,9 +55,6 @@ fun mainScreenScope() = scopeBuilder("Main") {
         eventThread<TestEvent>().then(intContainer) { state, event ->
             12
         }
-        eventThread<AnotherEvent> {
-            Logger.d("DEFAULT") { intResource().toString() }
-        }
         eventThread<SetLong>().then(longContainer) { state, event ->
             event.new
         }

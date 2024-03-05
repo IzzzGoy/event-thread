@@ -52,6 +52,9 @@ inline fun <reified PUSH : NavigationDestination> ScopeHolderBuilder.navGraph(
 
         threads {
             eventThread<PUSH>().then(stack) { stack: List<ReadyScreen>, event ->
+                description {
+                    "Event for navigation to next screen: ${event::class.simpleName} with params ${event.params.keys}"
+                }
                 val screen = navGraph()().screens[event::class]?.invoke()
                     ?: error("Missing screen: $event")
                 screen.checkParams(event.params)

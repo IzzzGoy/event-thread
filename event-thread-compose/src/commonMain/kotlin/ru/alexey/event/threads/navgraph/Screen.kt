@@ -2,12 +2,10 @@ package ru.alexey.event.threads.navgraph
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import ru.alexey.event.threads.ListBuilder
+import ru.alexey.event.threads.utils.ListBuilder
 import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.widget.Widget
-import ru.alexey.event.threads.widget.createWidget
 import ru.alexey.event.threads.widget.widget
 import kotlin.properties.ReadOnlyProperty
 import kotlin.random.Random

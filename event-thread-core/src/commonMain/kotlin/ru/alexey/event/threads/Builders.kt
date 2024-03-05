@@ -91,68 +91,27 @@ abstract class Scope() : KeyHolder {
     operator fun plus(event: Event) = eventBus + event
 
     @Builder
-    inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.bind(noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
-        invoke(EventType.modification) { event ->
-            if (event is T) {
-                with(eventBus) {
-                    resolve<TYPE>()?.value?.let { type: TYPE ->
-                        val new = action(type, event)
-                        resolve<TYPE>()?.update { new }
-                    }
-                }
-            }
-        }
-        return this
-    }
-
-    @Builder
-    inline infix fun <reified T : Event, reified TYPE : Any> EventThread<T>.tap(noinline action: suspend EventBus.(TYPE, T) -> Unit): EventThread<T> {
-        invoke(EventType.process) { event ->
-            if (event is T) {
-                with(eventBus) {
-                    resolve<TYPE>()?.value?.also { type: TYPE ->
-                        this.action(type, event)
-                    }
-                }
-            }
-        }
-        return this
-    }
-
-    @Builder
-    inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.trigger(
-        crossinline factory: suspend (T) -> OTHER
-    ): EventThread<T> {
-        invoke(EventType.cascade) { event ->
-            if (event is T) {
-                eventBus + factory(event)
-            }
-        }
-
-        return this
-    }
-
-    @Builder
     inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.then(
-        crossinline factory: suspend (T) -> OTHER
+        crossinline factory: suspend EventThreadActionBuilder<T>.(T) -> OTHER
     ): EventThread<T> {
-        invoke(EventType.cascade) { event ->
-            if (event is T) {
-                eventBus + factory(event)
+        invoke(EventType.cascade) {
+            action {
+                eventBus + factory(it)
             }
         }
         return this
     }
 
     @Builder
-    inline fun <reified T : Event, reified TYPE : Any> EventThread<T>.then(datacontainer: Datacontainer<TYPE>, noinline action: suspend EventBus.(TYPE, T) -> TYPE): EventThread<T> {
-        invoke(EventType.modification) { event ->
-            if (event is T) {
-                with(eventBus) {
-                    val new = action(datacontainer.value, event)
-                    datacontainer.update {
-                        new
-                    }
+    inline fun <reified T : Event, reified TYPE : Any> EventThread<T>.then(
+        datacontainer: Datacontainer<TYPE>,
+        crossinline factory: suspend EventThreadActionBuilder<T>.(TYPE, T) -> TYPE
+    ): EventThread<T> {
+        invoke(EventType.modification) {
+            action {
+                val new = factory(datacontainer.value, it)
+                datacontainer.update {
+                    new
                 }
             }
         }
@@ -160,7 +119,7 @@ abstract class Scope() : KeyHolder {
     }
 
 
-    @Builder
+/*    @Builder
     inline fun <reified T : Event> eventThread(noinline action: suspend EventBus.(T) -> Unit): EventThread<T> {
 
         return object : EventThread<T>() {
@@ -180,7 +139,7 @@ abstract class Scope() : KeyHolder {
                 eventBus { this }
             }
         }
-    }
+    }*/
 
     @Builder
     inline fun <reified T : Event> eventThread(): EventThread<T> {

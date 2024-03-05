@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.Event
+import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonResource
@@ -53,9 +54,17 @@ val intResource by observable {
 val startScreenWidget by widget<String> { it, modifier ->
     Text(it)
     val holder = LocalScopeHolder.current
-    Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
-        Text("Click")
+
+    Column {
+        LocalScope.current.eventBus.metadata.forEach {
+            Text(it.toString())
+        }
+        Button(onClick = { holder + SecondScreen(mapOf(String::class to { "Hello world" })) }) {
+            Text("Click")
+        }
     }
+
+
 }
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -125,6 +134,9 @@ fun provideScopeHolder() = scopeHolder {
 
         threads {
             eventThread<SetString>().then(intContainer) { _: String, setString: SetString ->
+                description {
+                    "Just set string dude :)"
+                }
                 setString.str
             }
         }
