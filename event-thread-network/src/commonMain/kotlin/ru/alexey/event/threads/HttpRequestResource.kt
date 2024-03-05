@@ -16,13 +16,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.serialization.Serializable
 import ru.alexey.event.threads.resources.Resource
-import ru.alexey.event.threads.resources.ResourceProvider
 import ru.alexey.event.threads.resources.valueResource
 
 object HttpRequestResource {
-    inline fun <reified T : @Serializable Any> ResourceProvider.get(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any> httpGet(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -37,9 +36,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any, reified R: Any> ResourceProvider.get(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any, reified R: Any> httpGet(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         resource: R,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -54,9 +53,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any> ResourceProvider.post(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any> httpPost(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -71,9 +70,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any, reified R: Any> ResourceProvider.post(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any, reified R: Any> httpPost(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         resource: R,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -88,9 +87,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any> ResourceProvider.delete(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any> httpDelete(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -105,9 +104,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any, reified R: Any> ResourceProvider.delete(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any, reified R: Any> httpDelete(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         resource: R,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -122,9 +121,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any> ResourceProvider.put(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any> httpPut(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         url: String,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {
@@ -139,9 +138,9 @@ object HttpRequestResource {
         )
     }
 
-    inline fun <reified T : @Serializable Any, reified R: Any> ResourceProvider.put(
-        coroutineScope: CoroutineScope = resource(CoroutineScope::class)(),
-        httpClient: HttpClient = resource(HttpClient::class)(),
+    inline fun <reified T : @Serializable Any, reified R: Any> httpPut(
+        coroutineScope: CoroutineScope,
+        httpClient: HttpClient,
         resource: R,
         crossinline block: HttpRequestBuilder.() -> Unit = {}
     ): Resource<ResponseWrapper<T>> {

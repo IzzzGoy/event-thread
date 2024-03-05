@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 import ru.alexey.event.threads.Event
-import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.StrictEvent
 import ru.alexey.event.threads.cache.cacheJsonResource
@@ -128,7 +127,15 @@ fun provideScopeHolder() = scopeHolder {
 
         emitters {
             emitter {
-                wrapFlow(flowOf(SetString(Random.Default.nextBytes(16).toHexString())))
+                wrapFlow(
+                    flow {
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                        delay(1000)
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                        delay(1000)
+                        emit(SetString(Random.Default.nextBytes(16).toHexString()))
+                    }
+                )
             }
         }
 

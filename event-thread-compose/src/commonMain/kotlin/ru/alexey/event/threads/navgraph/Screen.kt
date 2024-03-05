@@ -1,7 +1,12 @@
 package ru.alexey.event.threads.navgraph
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.StateFlow
+import ru.alexey.event.threads.LocalScope
+import ru.alexey.event.threads.datacontainer.Datacontainer
 import ru.alexey.event.threads.utils.ListBuilder
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.scope
@@ -141,9 +146,9 @@ inline fun <reified T : Any> widget(
             @Composable
             override fun Content(modifier: Modifier) {
                 scope(name ?: property.name) {
-                    widget(T::class) {
-                        content(it, modifier)
-                    }
+                    val dc: StateFlow<T> by LocalScope.current
+                    val state by dc.collectAsState()
+                    content(state, modifier)
                 }
             }
         }

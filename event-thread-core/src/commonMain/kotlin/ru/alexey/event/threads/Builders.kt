@@ -6,8 +6,11 @@ import ru.alexey.event.threads.scopeholder.KeyHolder
 import ru.alexey.event.threads.datacontainer.ContainerBuilder
 import ru.alexey.event.threads.emitter.Emitter
 import ru.alexey.event.threads.emitter.EmittersBuilder
+import kotlin.properties.ReadOnlyProperty
 import kotlin.random.Random
 import kotlin.reflect.KClass
+import kotlin.reflect.KMutableProperty
+import kotlin.reflect.KProperty
 
 class ScopeBuilder(
     private var name: String,
@@ -88,6 +91,10 @@ abstract class Scope() : KeyHolder {
     inline fun <reified T : Any> resolveOrThrow(): Datacontainer<T> =
         get(T::class) ?: throw Exception("Container not registered")
 
+    inline operator fun<reified T: Any> getValue(thisRef: Any?, property: KProperty<*>): Datacontainer<T> {
+        return resolveOrThrow()
+    }
+
     operator fun plus(event: Event) = eventBus + event
 
     @Builder
@@ -154,6 +161,8 @@ abstract class Scope() : KeyHolder {
             }
         }
     }
+
+
 
     //inline fun <reified T : Any> resource() = resource(T::class)
 
