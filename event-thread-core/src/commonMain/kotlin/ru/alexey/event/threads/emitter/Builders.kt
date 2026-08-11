@@ -1,7 +1,7 @@
 package ru.alexey.event.threads.emitter
 
 import kotlinx.coroutines.flow.Flow
-import ru.alexey.event.threads.Event
+import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.Scope
 
 class EmittersBuilder {

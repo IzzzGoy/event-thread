@@ -8,22 +8,15 @@ version = project.rootProject.version
 group = project.rootProject.group
 
 kotlin {
+    jvmToolchain(17)
     applyDefaultHierarchyTemplate()
 
     androidTarget {
         publishLibraryVariants("release")
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
     }
-    iosX64()
     iosArm64()
     iosSimulatorArm64()
-    jvm {
-        jvmToolchain(8)
-    }
+    jvm()
     js(IR) {
         binaries.executable()
         browser {
@@ -38,36 +31,36 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                implementation("io.github.xxfast:kstore:0.6.0")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.6.0")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.0")
+                implementation(libs.kstore)
+                implementation(libs.kotlinx.serialization.json.okio)
+                implementation(libs.kotlinx.serialization.cbor)
                 implementation(project(":event-thread-core"))
 
-                api("com.squareup.okio:okio:3.6.0")
+                api(libs.okio)
             }
         }
 
         jsMain {
             dependencies {
-                implementation("io.github.xxfast:kstore-storage:0.6.0")
+                implementation(libs.kstore.storage)
             }
         }
 
         iosMain {
             dependencies {
-                implementation("io.github.xxfast:kstore-file:0.6.0")
+                implementation(libs.kstore.file)
             }
         }
 
         jvmMain {
             dependencies {
-                implementation("net.harawata:appdirs:1.2.2")
-                implementation("io.github.xxfast:kstore-file:0.6.0")
+                implementation(libs.appdirs)
+                implementation(libs.kstore.file)
             }
         }
         androidMain {
             dependencies {
-                implementation("io.github.xxfast:kstore-file:0.6.0")
+                implementation(libs.kstore.file)
             }
         }
     }
@@ -75,7 +68,7 @@ kotlin {
 
 android {
     namespace = "ru.alexey.event.threads.cache"
-    compileSdk = 33
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
     }

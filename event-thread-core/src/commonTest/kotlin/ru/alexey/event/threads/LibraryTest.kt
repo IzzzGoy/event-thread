@@ -1,10 +1,7 @@
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.Privacy
-import ru.alexey.event.threads.StrictEvent
+import ru.alexey.event.threads.bus.StrictEvent
 import ru.alexey.event.threads.datacontainer.datacontainerKey
-import ru.alexey.event.threads.datacontainer.DatacontainerKey
 import ru.alexey.event.threads.datacontainer.datacontainer
 import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.invoke
@@ -28,7 +25,7 @@ class Test {
 
         val scope = scopeBuilder("test") {
 
-            val intDatacontainer by datacontainer(key) {
+            val intDatacontainer by datacontainer(key.source) {
                 watcher { println(it) }
             }
 
@@ -52,7 +49,8 @@ class Test {
             }
         }
 
-        println(scope.metadata)
-        scope + DummyEvent
+        val builtScope = scope(emptyMap()).build()
+        println(builtScope.metadata)
+        builtScope + DummyEvent
     }
 }

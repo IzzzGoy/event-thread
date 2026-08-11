@@ -11,7 +11,11 @@ import kotlin.properties.ReadOnlyProperty
 
 
 interface Datacontainer<T> : StateFlow<T> {
-    suspend fun update(block: (T) -> T)
+    /**
+     * Not reentrant: calling [update] again on the same container from within [block]
+     * (synchronously, on the same coroutine) will hang.
+     */
+    suspend fun update(block: suspend (T) -> T)
 }
 
 abstract class RealDataContainer<T>(
@@ -21,12 +25,12 @@ abstract class RealDataContainer<T>(
 
 @OptIn(ExperimentalStdlibApi::class)
 inline fun<reified T: Any> ContainerBuilder.realDataContainer(
-    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: ((T) -> T) -> Unit
+    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: suspend (suspend (T) -> T) -> Unit
 ): RealDataContainer<T> = object : AutoCloseable, RealDataContainer<T>(
     flow
 ) {
 
-    override suspend fun update(block:  (T) -> T) {
+    override suspend fun update(block: suspend (T) -> T) {
         innerUpdate(block)
     }
 

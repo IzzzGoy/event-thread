@@ -1,10 +1,8 @@
 package ru.alexey.event.threads.scopeholder
 
-import ru.alexey.event.threads.Event
-import ru.alexey.event.threads.Scope
+import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.ScopeBuilder
 import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.scopeBuilder
 import kotlin.reflect.KClass
 
 class ScopeHolderBuilder {

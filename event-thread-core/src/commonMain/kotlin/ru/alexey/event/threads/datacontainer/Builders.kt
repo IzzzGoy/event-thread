@@ -8,10 +8,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import ru.alexey.event.threads.Builder
 import ru.alexey.event.threads.ScopeBuilder
-import ru.alexey.event.threads.foldAndStateWithProxy
 import ru.alexey.event.threads.foldAndStateWithProxyAndWatchers
 import ru.alexey.event.threads.resources.ObservableResource
-import ru.alexey.event.threads.resources.flowResource
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 
@@ -45,15 +43,17 @@ inline fun<reified T: Any> ScopeBuilder.datacontainer(
         var scope: CoroutineScope
         var watchers: List<(T) -> Unit>
 
-        DatacontainerBuilder(T::class).apply { block() }.build().also {
+        DatacontainerBuilder<T>().apply(block).build().also {
             transforms = it.transforms
             scope = it.coroutineScope
             watchers = it.watchers
         }
+        val mutex = Mutex()
         with(containerBuilder) {
-            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { it: (T) -> T ->
-                scope.launch {
-                    source.update(it)
+            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { block: suspend (T) -> T ->
+                mutex.withLock {
+                    val new = block(source.value)
+                    source.update { new }
                 }
             }
         }
@@ -68,7 +68,7 @@ inline fun<reified T: Any> ScopeBuilder.parent() = ReadOnlyProperty<ScopeBuilder
 
 data class Transform<Other : Any, T : Any>(
     val other: () -> Flow<Other>,
-    val action: suspend (@UnsafeVariance Other, @UnsafeVariance T) -> T
+    val action: suspend ( Other, @UnsafeVariance T) -> T
 )
 
 
@@ -79,7 +79,7 @@ interface DataContainerConfig<T: Any> {
     val watchers: List<(T) -> Unit>
 }
 
-class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
+class DatacontainerBuilder<T : Any> {
 
     private val transforms = mutableListOf<Transform<out Any, T>>()
 

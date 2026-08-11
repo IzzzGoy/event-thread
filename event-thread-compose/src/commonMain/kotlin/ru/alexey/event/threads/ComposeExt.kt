@@ -3,8 +3,8 @@ package ru.alexey.event.threads
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.scopeholder.ScopeHolder
 import kotlin.reflect.KClass
@@ -82,11 +82,11 @@ fun ScopeHolder(block: () -> ScopeHolder, content: @Composable () -> Unit) {
 
 @Composable
 fun<T: Event> Scope.external(clazz: KClass<T>, block: (T) -> Unit) {
-    LaunchedEffect(Unit) {
+    /*LaunchedEffect(Unit) {
         eventBus.external(clazz) {
             if (clazz.isInstance(it)) {
                 block(it as T)
             }
         }
-    }
+    }*/
 }

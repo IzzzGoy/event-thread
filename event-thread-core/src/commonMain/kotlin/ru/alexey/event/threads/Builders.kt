@@ -1,6 +1,9 @@
 package ru.alexey.event.threads
 
-import ru.alexey.event.threads.EventBus.Companion.defaultFactory
+import ru.alexey.event.threads.bus.Event
+import ru.alexey.event.threads.bus.EventBus
+import ru.alexey.event.threads.bus.EventBus.Companion.defaultFactory
+import ru.alexey.event.threads.bus.EventBussBuilder
 import ru.alexey.event.threads.datacontainer.Datacontainer
 import ru.alexey.event.threads.scopeholder.KeyHolder
 import ru.alexey.event.threads.datacontainer.ContainerBuilder
@@ -8,14 +11,13 @@ import ru.alexey.event.threads.datacontainer.DatacontainerKey
 import ru.alexey.event.threads.emitter.Emitter
 import ru.alexey.event.threads.emitter.EmittersBuilder
 import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.scopeholder.ScopeHolder
 import kotlin.random.Random
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
 class ScopeBuilder(
     private var name: String,
-    private var parents: List<ScopeBuilder> = emptyList()
+    parents: List<ScopeBuilder> = emptyList()
 ) {
     private var configs: ConfigBuilder.() -> Unit = {}
     val containerBuilder = ContainerBuilder()
@@ -44,11 +46,36 @@ class ScopeBuilder(
                             }
                             emitters = emittersBuilder.build(this)
                         }
+
+                        override fun close() {
+                            containerBuilder.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
+                            super.close()
+                        }
                     }
                 }
             }
 
+    fun build(): Scope {
+        val configBuilder = ConfigBuilder()
+        configs(configBuilder)
+        val config = configBuilder.build()
+        return object : Scope() {
+            override val key: String = name
+            override val eventBus: EventBus = config.eventBus
+            override val description: String = config.description
+            override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
 
+            init {
+                applied.forEach { it() }
+                emitters = emittersBuilder.build(this)
+            }
+
+            override fun close() {
+                containerBuilder.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
+                super.close()
+            }
+        }
+    }
 
     @Builder
     fun config(block: ConfigBuilder.() -> Unit) {
@@ -98,13 +125,18 @@ class ConfigBuilder {
 class ScopeConfig(val eventBus: EventBus, val description: String)
 class ScopeMetadata(val description: String, val eventsMetadata: Map<String, EventThreadInfo>)
 
-abstract class Scope : KeyHolder {
+@OptIn(ExperimentalStdlibApi::class)
+abstract class Scope : KeyHolder, AutoCloseable {
 
     abstract val eventBus: EventBus
     abstract val description: String
     val metadata
         get() = ScopeMetadata(description, eventBus.metadata)
     protected lateinit var emitters: List<Emitter<out Event>>
+
+    override fun close() {
+        eventBus.close()
+    }
     abstract operator fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>?
     inline fun <reified T : Any> resolve(): Datacontainer<T>? = get(T::class)
     inline fun <reified T : Any> resolveOrThrow(): Datacontainer<T> =
@@ -119,7 +151,9 @@ abstract class Scope : KeyHolder {
         return resolveOrThrow()
     }
 
-    operator fun plus(event: Event) = eventBus + event
+    operator fun plus(event: Event) {
+        eventBus += event
+    }
 
 
     inline fun <reified T : Event> thread(block: EventThreadMetadataBuilder<T>.() -> Unit): EventThread<T> {
@@ -135,7 +169,7 @@ abstract class Scope : KeyHolder {
         crossinline factory: suspend (T) -> OTHER
     ): EventThread<T> {
         val action = EventThreadActionBuilder<T>(EventType.cascade) {
-            eventBus + factory(it)
+            eventBus += factory(it)
         }
         invoke(action.build())
         return this
@@ -147,10 +181,7 @@ abstract class Scope : KeyHolder {
         crossinline factory: suspend (TYPE, T) -> TYPE
     ): EventThread<T> {
         val action = EventThreadActionBuilder<T>(EventType.modification) {
-            val new = factory(datacontainer.value, it)
-            datacontainer.update {
-                new
-            }
+            datacontainer.update { current -> factory(current, it) }
         }
         invoke(action.build())
         return this
@@ -205,17 +236,4 @@ fun scopeBuilder(
 @DslMarker
 annotation class Builder
 
-
-interface ExternalEventWrapper<T : Event> {
-    fun handle(event: T)
-    val key: KClass<T>
-}
-
-fun <T : Event> Scope.handle(event: ExternalEventWrapper<T>) {
-    eventBus.external(event.key) {
-        if (event.key.isInstance(it)) {
-            event.handle(it as T)
-        }
-    }
-}
 

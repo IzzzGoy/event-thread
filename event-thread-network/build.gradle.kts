@@ -16,22 +16,15 @@ version = project.rootProject.version
 group = project.rootProject.group
 
 kotlin {
+    jvmToolchain(17)
     applyDefaultHierarchyTemplate()
 
     androidTarget {
         publishLibraryVariants("release")
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
     }
-    iosX64()
     iosArm64()
     iosSimulatorArm64()
-    jvm {
-        jvmToolchain(8)
-    }
+    jvm()
     js(IR) {
         binaries.executable()
         browser {
@@ -46,19 +39,18 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                val ktorVersion = "2.3.10"
                 implementation(project(":event-thread-core"))
-                implementation("io.ktor:ktor-client-core:$ktorVersion")
-                implementation("io.ktor:ktor-client-resources:$ktorVersion")
-                implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
-                implementation("io.ktor:ktor-client-websockets:$ktorVersion")
+                implementation(libs.ktor.client.core)
+                implementation(libs.ktor.client.resources)
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.serialization.kotlinx.json)
+                implementation(libs.ktor.client.websockets)
             }
         }
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
     }
@@ -67,7 +59,7 @@ kotlin {
 
 android {
     namespace = "ru.alexey.event.threads"
-    compileSdk = 33
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
     }

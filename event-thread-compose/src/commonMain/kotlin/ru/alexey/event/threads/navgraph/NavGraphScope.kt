@@ -57,8 +57,8 @@ inline fun <reified PUSH : NavigationDestination> ScopeHolderBuilder.navGraph(
                 privacy(Privacy.public)
             }.then(stack) { stack: List<ReadyScreen>, event ->
 
-                val screen = navGraph()().screens[event::class]?.invoke()
-                    ?: error("Missing screen: $event")
+                val screen = navGraph()().screenFor(event::class)
+                    ?: error("No screen registered for ${event::class.simpleName}")
                 screen.checkParams(event.params)
                 stack + ReadyScreen(screen, event.params)
             }
@@ -77,10 +77,10 @@ inline fun <reified PUSH : NavigationDestination> ScopeHolderBuilder.navGraph(
                     } else {
                         stack
                     }
+                } else if (stack.none { it.first.key == event.screen.key }) {
+                    stack
                 } else {
-                    stack.dropLastWhile {
-                        (it.first.key == event.screen.key) and (stack.first().first.key != event.screen.key)
-                    }
+                    stack.dropLastWhile { it.first.key != event.screen.key }
                 }
             }
         }

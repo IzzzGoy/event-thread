@@ -2,7 +2,6 @@ package ru.alexey.event.threads.cache
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.json.Json
@@ -24,13 +23,12 @@ class CacheResource<T : @Serializable Any>(
     }
 }
 
-@OptIn(InternalSerializationApi::class)
 inline fun<reified T: @Serializable Any> cacheJsonResource(
     key: String,
     initial: T,
     json: Json,
 ): ObservableResource<T> {
-    val serializer = T::class.serializer()
+    val serializer = serializer<T>()
     val cache = jsonCache(
         path = pathToJSON(key),
         json = json,
@@ -47,13 +45,12 @@ inline fun<reified T: @Serializable Any> cacheJsonResource(
     )
 }
 
-@OptIn(InternalSerializationApi::class)
 inline fun<reified T: @Serializable Any> cacheBinaryResource(
     key: String,
     initial: T,
     cbor: Cbor,
 ): ObservableResource<T> {
-    val serializer = T::class.serializer()
+    val serializer = serializer<T>()
     val cache = binaryCache(
         path = pathToBinary(key),
         cbor = cbor,

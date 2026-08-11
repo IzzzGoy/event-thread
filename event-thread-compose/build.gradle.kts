@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.compose)
     alias(libs.plugins.android.library)
+    alias(libs.plugins.compose.compiler)
     id("convention.publication-compose")
 }
 
@@ -10,11 +11,9 @@ kotlin {
 
     iosArm64()
     iosSimulatorArm64()
-    iosX64()
 
-    jvm {
-        jvmToolchain(8)
-    }
+    jvmToolchain(17)
+    jvm()
     js(IR) {
         binaries.executable()
         browser {
@@ -28,11 +27,6 @@ kotlin {
 
     androidTarget {
         publishLibraryVariants("release")
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
     }
 
     sourceSets {
@@ -43,12 +37,18 @@ kotlin {
                 implementation(project(":event-thread-core"))
             }
         }
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
     }
 }
 
 android {
     namespace = "ru.alexey.event.threads"
-    compileSdk = 33
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
     }

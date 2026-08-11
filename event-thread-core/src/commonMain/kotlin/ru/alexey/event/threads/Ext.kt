@@ -1,3 +1,5 @@
+@file:Suppress("UNCHECKED_CAST")
+
 package ru.alexey.event.threads
 
 import kotlinx.coroutines.CoroutineScope
@@ -10,8 +12,11 @@ import ru.alexey.event.threads.datacontainer.Transform
 import ru.alexey.event.threads.resources.ObservableResource
 
 inline fun <reified T : Any> List<Transform<out Any, T>>.foldWithProxy(proxy: Flow<T>): Flow<T> =
-    this.fold(proxy) { acc, (flow, transform) ->
-        flow().combine(acc, transform)
+    this.fold(proxy) { acc, transform ->
+        val action = transform.action as suspend (Any, T) -> T
+        transform.other().combine(acc) { a, b: T ->
+            action(a, b)
+        }
     }
 
 inline fun <reified T : Any> List<Transform<out Any, T>>.foldAndStateWithProxy(

@@ -1,6 +1,7 @@
 package ru.alexey.event.threads
 
 import kotlinx.serialization.Serializable
+import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.utils.Builder
 
 open class EventThread<T: Event>(
@@ -9,7 +10,11 @@ open class EventThread<T: Event>(
     private val eventThreadActions: MutableList<EventThreadAction<T>> = mutableListOf()
 
     val actions: List<suspend (Event) -> Unit>
-        get() = eventThreadActions.map { it.action as suspend (Event) -> Unit }
+        get() = eventThreadActions.map { it.action as? suspend (Event) -> Unit ?: throw IllegalStateException("Action casting failed") }
+
+    @Suppress("UNCHECKED_CAST")
+    val rawActions: List<EventThreadAction<Event>>
+        get() = eventThreadActions as List<EventThreadAction<Event>>
 
     val eventMetadatas: EventThreadInfo
         get() = EventThreadInfo(metadata, eventThreadActions.map { it.type })
@@ -20,8 +25,8 @@ open class EventThread<T: Event>(
         )
     }
 
-    operator fun plus(actions: List<suspend (Event) -> Unit>) {
-        eventThreadActions + actions
+    operator fun plus(actions: List<EventThreadAction<Event>>) {
+        eventThreadActions.addAll(actions.map { EventThreadAction(it.action, it.type) })
     }
 }
 
@@ -56,8 +61,6 @@ class EventThreadMetadataBuilder<T: Event>(
     private var privacy: Privacy = Privacy.public,
     private var override: Boolean = false,
 ): Builder<EventThread<T>> {
-
-
 
     override fun build(): EventThread<T> {
         return EventThread<T>(

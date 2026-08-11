@@ -9,52 +9,46 @@ group = project.rootProject.group
 
 kotlin {
 
-    jvmToolchain(8)
+    jvmToolchain(17)
 
     applyDefaultHierarchyTemplate()
-    
+
     androidTarget {
         publishLibraryVariants("release")
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "1.8"
-            }
-        }
     }
-    iosX64()
     iosArm64()
     iosSimulatorArm64()
-    
+
     sourceSets {
         commonMain {
             dependencies {
                 implementation(project(":event-thread-core"))
-                implementation("com.liftric:kvault:1.12.0")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.0")
+                implementation(libs.kvault)
+                implementation(libs.kotlinx.serialization.cbor)
 
-                implementation("io.realm.kotlin:library-base:1.12.0")
+                implementation(libs.realm.library.base)
 
-                implementation("dev.whyoleg.cryptography:cryptography-core:0.2.0")
+                implementation(libs.cryptography.core)
             }
         }
         /*jvmMain {
             dependencies {
-                implementation("dev.whyoleg.cryptography:cryptography-provider-jdk:0.2.0")
+                implementation(libs.cryptography.provider.jdk)
             }
         }*/
         androidMain {
             dependencies {
-                implementation("dev.whyoleg.cryptography:cryptography-provider-jdk:0.2.0")
+                implementation(libs.cryptography.provider.jdk)
             }
         }
         /*jsMain {
             dependencies {
-                implementation("dev.whyoleg.cryptography:cryptography-provider-webcrypto:0.2.0")
+                implementation(libs.cryptography.provider.webcrypto)
             }
         }*/
         iosMain {
             dependencies {
-                implementation("dev.whyoleg.cryptography:cryptography-provider-apple:0.2.0")
+                implementation(libs.cryptography.provider.apple)
             }
         }
     }
@@ -62,7 +56,7 @@ kotlin {
 
 android {
     namespace = "ru.alexey.event.threads.cache"
-    compileSdk = 33
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
     }

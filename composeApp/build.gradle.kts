@@ -1,21 +1,19 @@
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.compose)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.application)
     alias(libs.plugins.serialization)
 }
 
+
+
 kotlin {
-    androidTarget {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
-        }
-    }
+    jvmToolchain(17)
+
+    androidTarget()
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach {
@@ -33,14 +31,18 @@ kotlin {
             implementation(project(":event-thread-compose"))
             implementation(compose.runtime)
             implementation(compose.material3)
-            implementation(compose.materialIconsExtended)
-            implementation("io.github.skeptick.libres:libres-compose:1.2.1")
-            implementation("cafe.adriel.voyager:voyager-navigator:1.0.0-rc09")
-            implementation("co.touchlab:kermit:2.0.2")
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-            implementation("io.ktor:ktor-client-core:2.3.5")
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
-            //implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.1")
+            // material-icons-extended/-core are frozen at 1.7.3 by JetBrains (superseded by Material
+            // Symbols) - exclude its transitive Compose framework deps so it doesn't drag the old
+            // compose.ui/foundation/runtime into the graph alongside our current version.
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3") {
+                exclude(group = "org.jetbrains.compose.ui")
+                exclude(group = "org.jetbrains.compose.foundation")
+                exclude(group = "org.jetbrains.compose.runtime")
+            }
+            implementation(libs.kermit)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.ktor.client.core)
+            implementation(libs.kotlinx.serialization.json)
         }
 
         commonTest.dependencies {
@@ -48,15 +50,15 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation("androidx.appcompat:appcompat:1.6.1")
-            implementation("androidx.activity:activity-compose:1.8.0")
-            implementation("androidx.compose.ui:ui-tooling:1.5.4")
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-            implementation("io.ktor:ktor-client-okhttp:2.3.5")
+            implementation(libs.androidx.appcompat)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.compose.ui.tooling)
+            implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.ktor.client.okhttp)
         }
 
         iosMain.dependencies {
-            implementation("io.ktor:ktor-client-darwin:2.3.5")
+            implementation(libs.ktor.client.darwin)
         }
 
     }
@@ -64,11 +66,11 @@ kotlin {
 
 android {
     namespace = "org.company.sample"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
 
         applicationId = "org.company.sample.androidApp"
         versionCode = 1
@@ -85,12 +87,4 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.3"
-    }
 }
-
-
-/*libres {
-    // https://github.com/Skeptick/libres#setup
-}*/
