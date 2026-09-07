@@ -29,6 +29,7 @@ kotlin {
             implementation(project(":event-thread-cache"))
             implementation(project(":event-thread-secure"))
             implementation(project(":event-thread-compose"))
+            implementation(project(":event-thread-koin"))
             implementation(compose.runtime)
             implementation(compose.material3)
             // material-icons-extended/-core are frozen at 1.7.3 by JetBrains (superseded by Material
@@ -43,6 +44,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.koin.core)
         }
 
         commonTest.dependencies {

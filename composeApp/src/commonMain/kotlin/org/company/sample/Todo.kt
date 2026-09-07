@@ -20,6 +20,11 @@ data class SetDraftText(val text: String) : StrictEvent
 data class SetShowCompleted(val show: Boolean) : StrictEvent
 data class SelectList(val name: String) : StrictEvent
 
+// Emitted by the "TodoDomain" scope, a business-rule layer that never touches Work/Personal's
+// containers directly - it only reacts to the same events they do, and reports its own
+// decisions back as events. Routed via `consume` to just "Work"/"Personal", not broadcast.
+data class AddLimitReached(val totalAdded: Int) : StrictEvent
+
 // Wrapped in its own type (rather than reusing List<Todo>) so it can be registered as its
 // own container alongside the raw `todos` list - both are List<Todo>-shaped underneath and
 // would collide on the same erased KClass<List<*>> key if not distinguished this way.

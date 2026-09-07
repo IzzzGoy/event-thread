@@ -29,6 +29,10 @@ class FlowResource<T>(
     override suspend fun update(block: (T) -> T) {
         source.update(block)
     }
+
+    fun set(value: T) {
+        source.value = value
+    }
 }
 
 class ValueResource<T> (
@@ -39,7 +43,7 @@ class ValueResource<T> (
     }
 }
 
-inline fun<reified T: Any> flowResource(initial: T): ObservableResource<T> {
+inline fun<reified T: Any> flowResource(initial: T): FlowResource<T> {
     val source = MutableStateFlow(initial)
     return FlowResource(source)
 }

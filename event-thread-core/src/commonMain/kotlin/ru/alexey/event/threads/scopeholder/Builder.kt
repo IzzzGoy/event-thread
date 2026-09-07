@@ -1,7 +1,10 @@
 package ru.alexey.event.threads.scopeholder
 
+import ru.alexey.event.threads.Builder
 import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.ScopeBuilder
+import ru.alexey.event.threads.di.DependencyProvider
+import ru.alexey.event.threads.di.DummyProvider
 import ru.alexey.event.threads.resources.Parameters
 import kotlin.reflect.KClass
 
@@ -11,34 +14,37 @@ class ScopeHolderBuilder {
     private val external: MutableMap<KClass<out Event>, List<String>> = mutableMapOf()
     private val dependencies: MutableMap<String, List<String>> = mutableMapOf()
     private val implementations: MutableMap<String, List<String>> = mutableMapOf()
+    private var dependencyProvider: DependencyProvider = DummyProvider()
 
-    /*fun scope(key: String, block: (String, Parameters) -> ScopeBuilder): String {
-        factories[key] = { params, parents ->
-            block(key, params)
-        }
-        return key
-    }*/
-
-    fun scope(key: String, block: (String, List<ScopeBuilder>) -> ((Parameters) -> ScopeBuilder)): String {
-        factories[key] = { params, parents ->
-            block(key, parents)(params)
-        }
-        return key
+    @Builder
+    fun dependencyProvider(provider: DependencyProvider) {
+        this.dependencyProvider = provider
     }
 
+    /**
+     * Same registration as [scopeEmbedded], but returns [key] so it can be chained straight
+     * into [dependsOn]/[implements] - lets a feature module export its scope setup as a plain
+     * `ScopeBuilder.(Parameters) -> Unit` extension function (e.g. `ScopeBuilder::provideFooScope`)
+     * that the composition root wires in without needing to know its internals.
+     */
+    fun scope(key: String, init: ScopeBuilder.(Parameters) -> Unit): String {
+        scopeEmbedded(key, init)
+        return key
+    }
 
     fun build(): ScopeHolder {
         return ScopeHolder(
             external = external,
             factories = factories,
             dependencies = dependencies,
-            implementations = implementations
+            implementations = implementations,
+            dependencyProvider = dependencyProvider
         )
     }
 
     fun scopeEmbedded(key: String, init: ScopeBuilder.(Parameters) -> Unit) {
         factories[key] = { params, parents ->
-            ScopeBuilder(key, parents).apply { init(params) }
+            ScopeBuilder(key, parents, dependencyProvider).apply { init(params) }
         }
     }
 

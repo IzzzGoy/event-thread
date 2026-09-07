@@ -50,7 +50,11 @@ class Test {
         }
 
         val builtScope = scope(emptyMap()).build()
-        println(builtScope.metadata)
-        builtScope + DummyEvent
+        try {
+            println(builtScope.metadata)
+            builtScope + DummyEvent
+        } finally {
+            builtScope.close()
+        }
     }
 }

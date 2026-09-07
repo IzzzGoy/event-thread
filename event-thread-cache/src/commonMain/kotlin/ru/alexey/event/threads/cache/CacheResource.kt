@@ -2,6 +2,8 @@ package ru.alexey.event.threads.cache
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.json.Json
@@ -13,12 +15,19 @@ class CacheResource<T : @Serializable Any>(
     private val cache: Cache<T>,
     private val source: MutableStateFlow<T>,
 ) : ObservableResource<T>, StateFlow<T> by source {
+    private val mutex = Mutex()
+
     override suspend fun update(block: (T) -> T) {
-        runCatching {
-            block(cache.load())
-        }.onSuccess { new ->
-            cache.write(new)
-            source.emit(new)
+        mutex.withLock {
+            // source.value, not cache.load() - the file was already read once at construction
+            // and source has been kept in sync with every write since, so re-reading it here on
+            // every single update just re-does file I/O for a value already held in memory.
+            runCatching {
+                block(source.value)
+            }.onSuccess { new ->
+                cache.write(new)
+                source.emit(new)
+            }
         }
     }
 }

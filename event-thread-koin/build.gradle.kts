@@ -1,18 +1,21 @@
 plugins {
     alias(libs.plugins.multiplatform)
-    alias(libs.plugins.compose)
     alias(libs.plugins.android.library)
-    alias(libs.plugins.compose.compiler)
-    id("convention.publication-compose")
+    id("convention.publication-koin")
 }
 
+version = project.rootProject.version
+group = project.rootProject.group
+
 kotlin {
+    jvmToolchain(17)
     applyDefaultHierarchyTemplate()
 
+    androidTarget {
+        publishLibraryVariants("release")
+    }
     iosArm64()
     iosSimulatorArm64()
-
-    jvmToolchain(17)
     jvm()
     js(IR) {
         binaries.executable()
@@ -25,17 +28,11 @@ kotlin {
         }
     }
 
-    androidTarget {
-        publishLibraryVariants("release")
-    }
-
     sourceSets {
         commonMain {
             dependencies {
-                implementation(compose.runtime)
-                implementation(compose.ui)
-                implementation(project(":event-thread-core"))
-                implementation(libs.lifecycle.runtime.compose)
+                api(project(":event-thread-core"))
+                api(libs.koin.core)
             }
         }
         commonTest {
@@ -48,8 +45,8 @@ kotlin {
 }
 
 android {
-    namespace = "ru.alexey.event.threads"
-    compileSdk = 37
+    namespace = "ru.alexey.event.threads.koin"
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
     }

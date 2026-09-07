@@ -4,14 +4,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.ScopeBuilder
+import ru.alexey.event.threads.di.DependencyProvider
+import ru.alexey.event.threads.di.DummyProvider
 import ru.alexey.event.threads.resources.Parameters
 import kotlin.reflect.KClass
 
@@ -25,7 +27,8 @@ class ScopeHolder(
     val external: Map<KClass<out Event>, List<String>>,
     private val factories: Map<String, (Parameters, List<ScopeBuilder>) -> ScopeBuilder>,
     val dependencies: Map<String, List<String>> = emptyMap(),
-    private val implementations: Map<String, List<String>> = emptyMap()
+    private val implementations: Map<String, List<String>> = emptyMap(),
+    val dependencyProvider: DependencyProvider = DummyProvider()
 ) : AutoCloseable {
 
     private val active: MutableSet<Scope> = mutableSetOf()
@@ -38,11 +41,24 @@ class ScopeHolder(
     init {
         innerScope.launch {
             for (eventDef in externalEventsChannel) {
-                external.forEach { (_, receivers) ->
-                    active.forEach { activeItem ->
-                        if (activeItem.key in receivers && eventDef.key !in receivers) {
-                            activeItem.eventBus += eventDef.event
-                        }
+                // Only the mappings whose registered event type actually matches this event -
+                // the old version discarded the KClass key here and checked *every* mapping's
+                // receivers regardless of type, so an event could leak to a scope that was only
+                // ever configured to receive a *different* event type.
+                val receivers = external.entries
+                    .filter { (eventClass, _) -> eventClass.isInstance(eventDef.event) }
+                    .flatMapTo(mutableSetOf()) { (_, receivers) -> receivers }
+                if (receivers.isEmpty()) continue
+
+                active.forEach { activeItem ->
+                    // Exclude the scope that emitted this event - it already processed it once
+                    // (that's how it ended up on .output). `deliverExternally` (rather than
+                    // `+=`) delivers to the receiver's subscribers without re-emitting to *its*
+                    // own .output - otherwise the receiver's re-emission would look like a new
+                    // event eligible for another round of routing, bouncing forever between any
+                    // two scopes that are both configured as receivers for this event.
+                    if (activeItem.key != eventDef.key && activeItem.key in receivers) {
+                        activeItem.eventBus.deliverExternally(eventDef.event)
                     }
                 }
             }
@@ -61,20 +77,15 @@ class ScopeHolder(
             scope.build()
         }?.also { scope ->
             active += scope
-            scope.eventBus.output.combine(flowOf(scope.key)) { event, key ->
-                ExternalEventDefinition(key, event)
-            }.onEach {
-                externalEventsChannel.send(it)
-            }.launchIn(innerScope)
-            /*external.forEach { (k, receivers) ->
-                scope.eventBus.external(k) { event ->
-                    active.filter { s ->
-                        s.key in receivers && scope.key !in receivers
-                    }.forEach {
-                        it + event
-                    }
-                }
-            }*/
+            // Filtered here, per-scope, before anything reaches the shared channel: the vast
+            // majority of events aren't external-routed at all, so this drops them in parallel
+            // at the source instead of funneling every event from every scope through one
+            // shared channel drained by a single coroutine.
+            scope.eventBus.output
+                .filter { event -> external.keys.any { it.isInstance(event) } }
+                .map { event -> ExternalEventDefinition(scope.key, event) }
+                .onEach { externalEventsChannel.send(it) }
+                .launchIn(innerScope)
         }?.also {
             dependencies[it.key]?.forEach(::findOrLoad)
         }

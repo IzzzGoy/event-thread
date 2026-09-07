@@ -8,7 +8,7 @@ plugins {
     id("com.vanniktech.maven.publish") version "0.30.0" apply false
 }
 
-version = "1.0.0-beta1"
+version = "1.0.0-beta2"
 group = "io.github.izzzgoy"
 
 repositories {

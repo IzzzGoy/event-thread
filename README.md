@@ -49,6 +49,14 @@ commonMain {
 }
 ```
 
+> **⚠️ `event-thread-network` and `event-thread-secure` are on pause.** Both have known,
+> unfixed correctness issues (a shared `HttpClient` closed after the first request, a
+> `WebSocket` resource with no reconnect handling, an encrypted resource whose `update()` is a
+> no-op, an encryption key derived from a non-cryptographic seeded PRNG) and no active
+> maintenance right now - somewhere between *deprecated* and *outdated*, not a recommendation
+> against a future fix. Don't build on them for new code; `event-thread-core` +
+> `event-thread-compose` + `event-thread-cache` are the maintained set.
+
 ***
 
 ## Usage
@@ -179,6 +187,23 @@ scope. If you need to aggregate state living in separate scopes, do it explicitl
   every event for logging/analytics, and `coroutineScope { }` picks which `CoroutineScope` the
   bus runs on. Containers have their own, independent `coroutineScope { }` inside their
   `datacontainer(source) { }` block (defaults to `Dispatchers.Default`).
+- `onError { event, error -> }` (also inside `createEventBus { }`) registers a handler for
+  exceptions thrown by a watcher or by a thread's action while processing `event`. Without this,
+  an action that throws would otherwise crash the bus's internal dispatch coroutine and silently
+  stop it from processing any further events for that scope; with or without a handler
+  registered, a thrown exception now only aborts the *rest of that one action chain* (e.g. the
+  `.then()` calls after the one that threw don't run) - other subscribers and later events are
+  unaffected. Register as many handlers as you need (they all run, in registration order); with
+  none registered, the bus falls back to a diagnostic `println` so failures stay visible instead
+  of vanishing:
+
+  ```kotlin
+  config {
+      createEventBus {
+          onError { event, error -> logger.error("event $event failed", error) }
+      }
+  }
+  ```
 - `"Child" implements "Parent"` copies `Parent`'s thread registrations and *already-built*
   containers into `Child` when `Child` is loaded - each implementer gets its own independent
   copy (the parent's `scopeEmbedded` body re-runs fresh per implementer, it's a template, not a
@@ -214,6 +239,12 @@ scope. If you need to aggregate state living in separate scopes, do it explicitl
 - A child can also pull in one specific container from an implemented parent explicitly, with
   `val x by parent<T>()`, instead of relying on `implements` to copy it in as part of the whole
   parent template.
+- `"Child" dependsOn "Parent"` loads `Parent` automatically whenever `Child` is loaded (and frees
+  it when `Child` is freed, unless something else also depends on it) - unlike `implements`, this
+  doesn't copy anything into `Child`; it just piggybacks one scope's lifecycle onto another's, so
+  a supporting scope with no UI of its own (a background listener, a domain/business-rule scope)
+  can stay alive for as long as the scope that actually gets mounted from Compose, without
+  Compose needing to know it exists.
 
 ### 6. Caching
 
@@ -293,4 +324,45 @@ route an event to specific scopes regardless of what else is loaded, declare it 
 MyGlobalEvent::class consume listOf("ScopeA", "ScopeB")
 ```
 
+This also applies to events a scope emits itself (`eventBus += event` from inside a `thread { }`
+block, not just `holder + event`) - any event flowing through a scope's bus is checked against
+`consume` mappings by its *actual* registered type and routed only to the scopes configured for
+that type, excluding the scope that emitted it. Delivery to each configured receiver happens
+exactly once per emission and isn't itself re-broadcast, so two scopes both configured to receive
+the same event type won't end up echoing it back and forth.
+
+This is the mechanism behind a headless "domain" scope that talks to UI scopes purely through
+events - see the [scenarios](#common-scenarios) below.
+
 ***
+
+## Common scenarios
+
+Quick "I want to do X" → "use Y" pointers into the walkthrough above.
+
+- **The same CRUD logic for several independent lists/instances.** A parent template scope
+  (`implements`, §5) holding the shared `threads { }`, with each concrete scope loaded using
+  different `parameters` (e.g. a different cache key) so they don't share storage. See
+  `TodoListBase`/`Work`/`Personal` in the sample.
+- **A derived/filtered view without a shared mutable variable.** Composite state via
+  `.transform` (§4) inside the *same* scope - e.g. a raw list plus a "hide completed" flag folded
+  into a filtered view, recomputed automatically whenever either input changes.
+- **Business logic that shouldn't know your UI exists.** A separate, headless scope that reacts
+  to the same events the UI dispatches, keeps its own event-sourced state (no access to any other
+  scope's containers), and reports its verdict back as a new event - routed with `consume` (§9)
+  to just the scope(s) that need it, not broadcast everywhere. See `TodoDomain` in the sample: it
+  counts `AddTodo` events and emits `AddLimitReached` once a threshold is crossed, without ever
+  touching `Work`/`Personal`'s own todo lists.
+- **A supporting scope that should just always be around.** `dependsOn` (§5) ties a background
+  scope's lifecycle to whatever scope Compose actually mounts, so it loads/frees automatically
+  without a composable needing to know it exists (`TodoDomain` again - it depends on `TodoTabs`).
+- **Push/pop navigation with typed parameters per screen.** `navGraph`/`NavigationDestination`
+  (§7); each destination is itself an event, so navigating is just dispatching one.
+- **A small piece of UI (a counter, a badge) reused across several screens** without re-wiring
+  `LocalScope`/`resolveOrThrow` at every call site. `createWidget` (§8), bound to one fixed scope
+  name and container type.
+- **State that needs to survive navigating away and back.** Mount the owning scope *above* the
+  `NavGraph` composable (§7), not inside one destination's own screen - only the top of the nav
+  stack is ever composed, so a scope scoped to a single destination is disposed the moment you
+  navigate elsewhere.
+

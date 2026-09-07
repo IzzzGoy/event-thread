@@ -5,6 +5,8 @@ import ru.alexey.event.threads.bus.EventBus
 import ru.alexey.event.threads.bus.EventBus.Companion.defaultFactory
 import ru.alexey.event.threads.bus.EventBussBuilder
 import ru.alexey.event.threads.datacontainer.Datacontainer
+import ru.alexey.event.threads.di.DependencyProvider
+import ru.alexey.event.threads.di.DummyProvider
 import ru.alexey.event.threads.scopeholder.KeyHolder
 import ru.alexey.event.threads.datacontainer.ContainerBuilder
 import ru.alexey.event.threads.datacontainer.DatacontainerKey
@@ -17,7 +19,8 @@ import kotlin.reflect.KProperty
 
 class ScopeBuilder(
     private var name: String,
-    parents: List<ScopeBuilder> = emptyList()
+    parents: List<ScopeBuilder> = emptyList(),
+    val dependencyProvider: DependencyProvider = DummyProvider()
 ) {
     private var configs: ConfigBuilder.() -> Unit = {}
     val containerBuilder = ContainerBuilder()
@@ -38,6 +41,7 @@ class ScopeBuilder(
                         override val key: String = name
                         override val eventBus: EventBus = config.eventBus
                         override val description: String = config.description
+                        override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
                         override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
 
                         init {
@@ -63,6 +67,7 @@ class ScopeBuilder(
             override val key: String = name
             override val eventBus: EventBus = config.eventBus
             override val description: String = config.description
+            override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
             override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
 
             init {
@@ -130,6 +135,7 @@ abstract class Scope : KeyHolder, AutoCloseable {
 
     abstract val eventBus: EventBus
     abstract val description: String
+    abstract val dependencyProvider: DependencyProvider
     val metadata
         get() = ScopeMetadata(description, eventBus.metadata)
     protected lateinit var emitters: List<Emitter<out Event>>
@@ -215,20 +221,23 @@ abstract class Scope : KeyHolder, AutoCloseable {
 inline fun scopeBuilder(
     keyHolder: KeyHolder? = null,
     parents: List<ScopeBuilder> = emptyList(),
+    dependencyProvider: DependencyProvider = DummyProvider(),
     noinline block: ScopeBuilder.(Parameters) -> Unit
 ): (Parameters) -> ScopeBuilder =
-    scopeBuilder(keyHolder?.key, parents, block)
+    scopeBuilder(keyHolder?.key, parents, dependencyProvider, block)
 
 @Builder
 fun scopeBuilder(
     name: String? = null,
     parents: List<ScopeBuilder> = emptyList(),
+    dependencyProvider: DependencyProvider = DummyProvider(),
     block: ScopeBuilder.(Parameters) -> Unit
 ): (Parameters) -> ScopeBuilder {
     return {
         ScopeBuilder(
             name ?: Random.nextBytes(132).toString(),
-            parents
+            parents,
+            dependencyProvider
         ).apply { block(it) }
     }
 }
