@@ -26,12 +26,24 @@ interface IEventBus {
     fun collectToEventBus(events: Flow<Event>)
 }
 
+private data object EmitterFailure : Event
+
 @OptIn(ExperimentalStdlibApi::class)
 class EventBus(
-    private val coroutineScope: CoroutineScope,
+    parentScope: CoroutineScope,
     private val watchers: List<Interceptor>,
     private val errorHandlers: List<ErrorHandler> = emptyList()
 ): AutoCloseable, IEventBus {
+
+    // A supervised child of the caller-provided scope, not the scope itself: `close()` below
+    // cancels only this bus's own work. Cancelling `parentScope` directly (the old behavior)
+    // would cancel whatever the caller passed in via `.coroutineScope { }` in its *entirety* -
+    // e.g. their own `viewModelScope` - taking down everything else backed by that scope, not
+    // just this bus. The child's own SupervisorJob additionally means the reader loop below and
+    // the emitter collector in [collectToEventBus] can't cancel each other by failing.
+    private val coroutineScope = CoroutineScope(
+        parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job])
+    )
 
     private val channel: Channel<Event> = Channel(Channel.BUFFERED)
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
@@ -63,6 +75,17 @@ class EventBus(
     }
 
     private suspend fun dispatchToSubscribers(event: Event) {
+        // Watchers only see events this bus actually has a thread<T>() for. Every active scope
+        // used to get every broadcast event (see ScopeHolder.plus), so a watcher on one scope
+        // silently observed traffic meant for every other mounted scope, not just its own -
+        // this keeps that decision local to the bus instead of pushing it up to ScopeHolder.
+        //
+        // Computed once here and reused below for the non-strict dispatch loop, instead of
+        // scanning `subscribers` with `isInstance` twice per event (once via the old `handles()`
+        // call, once again to find which keys to run actions for).
+        val matchedKeys = subscribers.keys.filter { it.isInstance(event) }
+        if (matchedKeys.isEmpty()) return
+
         runGuarded(event) { watchers.forEach { it(event) } }
 
         when (event) {
@@ -71,10 +94,8 @@ class EventBus(
             }
 
             else -> {
-                for ((key, value) in subscribers.entries) {
-                    if (key.isInstance(event)) {
-                        runActions(event, actionsFor(value, key))
-                    }
+                for (key in matchedKeys) {
+                    runActions(event, actionsFor(subscribers[key], key))
                 }
             }
         }
@@ -188,7 +209,17 @@ class EventBus(
 
     override fun collectToEventBus(events: Flow<Event>) {
         coroutineScope.launch {
-            events.collect { event -> this@EventBus += event }
+            try {
+                events.collect { event -> this@EventBus += event }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                // Previously uncaught: an emitter Flow throwing here crossed into the platform's
+                // default uncaught-exception handler (a process crash on Android/iOS, a stray
+                // stderr trace with a now-dead collector on JVM/JS) instead of going through
+                // [errorHandlers] like every other failure path in this class.
+                notifyError(EmitterFailure, t)
+            }
         }
     }
 

@@ -23,6 +23,10 @@ abstract class RealDataContainer<T>(
 ) : StateFlow<T> by stateFlow, Datacontainer<T>
 
 
+// `scope` here is expected to already be a container-owned scope (see
+// `ScopeBuilder.datacontainer` in `datacontainer/Builders.kt`, the only caller): `close()`
+// below cancels it directly, so passing in a scope the caller still needs elsewhere - their own
+// `viewModelScope`, say - would take it down entirely the moment this one container is closed.
 @OptIn(ExperimentalStdlibApi::class)
 inline fun<reified T: Any> ContainerBuilder.realDataContainer(
     flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: suspend (suspend (T) -> T) -> Unit

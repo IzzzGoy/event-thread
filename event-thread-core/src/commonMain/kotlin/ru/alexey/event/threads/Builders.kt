@@ -2,8 +2,7 @@ package ru.alexey.event.threads
 
 import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.bus.EventBus
-import ru.alexey.event.threads.bus.EventBus.Companion.defaultFactory
-import ru.alexey.event.threads.bus.EventBussBuilder
+import ru.alexey.event.threads.bus.EventBusBuilder
 import ru.alexey.event.threads.datacontainer.Datacontainer
 import ru.alexey.event.threads.di.DependencyProvider
 import ru.alexey.event.threads.di.DummyProvider
@@ -22,69 +21,52 @@ class ScopeBuilder(
     parents: List<ScopeBuilder> = emptyList(),
     val dependencyProvider: DependencyProvider = DummyProvider()
 ) {
-    private var configs: ConfigBuilder.() -> Unit = {}
+    // A list, not a single replaced lambda: `apply(parent)` below appends the parent's config
+    // blocks here too, so a base scope's `config { createEventBus { watcher { } } }` still runs
+    // for a scope that `implements` it, instead of being silently dropped the moment the child
+    // declares its own `config { }` (which used to just overwrite this field).
+    private val configs = mutableListOf<ConfigBuilder.() -> Unit>()
     val containerBuilder = ContainerBuilder()
     private val applied = mutableListOf<Scope.() -> Unit>()
     private val emittersBuilder = EmittersBuilder()
     init {
         parents.forEach(::apply)
     }
-    val scope: Scope
-            by lazy {
-                with(ConfigBuilder()){
-                    configs()
 
-                    object : Scope() {
-
-                        val config = this@with.build()
-
-                        override val key: String = name
-                        override val eventBus: EventBus = config.eventBus
-                        override val description: String = config.description
-                        override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
-                        override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
-
-                        init {
-                            applied.forEach {
-                                it()
-                            }
-                            emitters = emittersBuilder.build(this)
-                        }
-
-                        override fun close() {
-                            containerBuilder.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
-                            super.close()
-                        }
-                    }
-                }
-            }
-
-    fun build(): Scope {
+    private fun buildConfig(): ScopeConfig {
         val configBuilder = ConfigBuilder()
-        configs(configBuilder)
-        val config = configBuilder.build()
-        return object : Scope() {
-            override val key: String = name
-            override val eventBus: EventBus = config.eventBus
-            override val description: String = config.description
-            override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
-            override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
+        with(configBuilder) { configs.forEach { it() } }
+        return configBuilder.build()
+    }
 
-            init {
-                applied.forEach { it() }
-                emitters = emittersBuilder.build(this)
-            }
+    // A single build path for this anonymous Scope, called only from `build()` below - there used
+    // to be a second, independent copy of it (an unused `val scope by lazy` exposing its own
+    // build), and the two had drifted out of sync once (one had the containers-close-on-close
+    // behavior, the other didn't notice for a while). Removed rather than kept in sync: nothing
+    // in the repo ever called it.
+    private fun buildScope(config: ScopeConfig): Scope = object : Scope() {
+        override val key: String = name
+        override val eventBus: EventBus = config.eventBus
+        override val description: String = config.description
+        override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
+        override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
 
-            override fun close() {
-                containerBuilder.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
-                super.close()
-            }
+        init {
+            applied.forEach { it() }
+            emitters = emittersBuilder.build(this)
+        }
+
+        override fun close() {
+            containerBuilder.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
+            super.close()
         }
     }
 
+    fun build(): Scope = buildScope(buildConfig())
+
     @Builder
     fun config(block: ConfigBuilder.() -> Unit) {
-        configs = block
+        configs += block
     }
 
     @Builder
@@ -105,15 +87,24 @@ class ScopeBuilder(
     fun apply(scopeBuilder: ScopeBuilder) {
         applied += scopeBuilder.applied
         containerBuilder.apply(scopeBuilder.containerBuilder.containersEntries)
+        configs += scopeBuilder.configs
+        emittersBuilder.merge(scopeBuilder.emittersBuilder)
     }
 }
 
 class ConfigBuilder {
-    private var eventBus: EventBus = defaultFactory()
+    // One accumulating builder, not "replace with a freshly built EventBus on every call": with
+    // `ScopeBuilder.configs` now a list (see above), a base scope's `createEventBus { onError {
+    // } }` and a scope that `implements` it both run against this same ConfigBuilder - the
+    // implementing scope's own `createEventBus { watcher { } }` now adds to the base's
+    // interceptors/error handlers instead of throwing them away by building a brand new bus.
+    private val eventBusBuilder = EventBusBuilder()
+    private val eventBus by lazy { eventBusBuilder.build() }
     private var description: String = ""
+
     @Builder
-    fun createEventBus(block: EventBussBuilder.() -> Unit) {
-        eventBus = with(EventBussBuilder().also(block)) { build() }
+    fun createEventBus(block: EventBusBuilder.() -> Unit) {
+        eventBusBuilder.apply(block)
     }
 
     fun description(block: () -> String) {
@@ -226,6 +217,7 @@ inline fun scopeBuilder(
 ): (Parameters) -> ScopeBuilder =
     scopeBuilder(keyHolder?.key, parents, dependencyProvider, block)
 
+@OptIn(ExperimentalStdlibApi::class)
 @Builder
 fun scopeBuilder(
     name: String? = null,
@@ -234,8 +226,12 @@ fun scopeBuilder(
     block: ScopeBuilder.(Parameters) -> Unit
 ): (Parameters) -> ScopeBuilder {
     return {
+        // `Random.nextBytes(132).toString()` (the old default) doesn't encode the bytes at all -
+        // ByteArray.toString() prints the array's type and identity hash, e.g. "[B@1a2b3c4d",
+        // which isn't derived from the random content and isn't a meaningful unique key. Encode
+        // the bytes as hex instead, so an un-named anonymous scope actually gets a random name.
         ScopeBuilder(
-            name ?: Random.nextBytes(132).toString(),
+            name ?: Random.nextBytes(16).toHexString(),
             parents,
             dependencyProvider
         ).apply { block(it) }

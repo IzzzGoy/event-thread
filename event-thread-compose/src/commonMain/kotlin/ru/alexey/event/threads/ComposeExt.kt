@@ -7,10 +7,41 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.resources.Parameters
 import ru.alexey.event.threads.scopeholder.ScopeHolder
-import kotlin.reflect.KClass
+
+// Shared by `scope()` and `NavGraph()`: find-or-load the named scope exactly once per `name`
+// mount, and free it when the last mounted user of that name is disposed. Deliberately doesn't
+// provide `LocalScope` or touch lifecycle/params - `NavGraph` needs this bookkeeping but must
+// NOT push its own scope onto `LocalScope`, since the screens it renders resolve *their caller's*
+// ambient scope (e.g. a "Work"/"Personal" tab), not the nav graph's own.
+@Composable
+internal fun rememberOrLoadScope(
+    name: String,
+    scopeHolder: ScopeHolder,
+    resolve: () -> Scope
+): Scope {
+    val counter = LocalScopeCounter.current
+
+    // Keyed on `name`, not `Unit` - see `scope()`'s doc below for why.
+    val scope = remember(name) { resolve() }
+
+    DisposableEffect(name) {
+        // register() lives here, not as a plain statement in the composable body - this makes
+        // it run exactly once per (name) mount, paired 1:1 with onDispose's unregister() below.
+        // A plain top-level call would re-run on every recomposition (e.g. every keystroke in a
+        // sibling text field), incrementing the counter without a matching decrement and
+        // leaving `holder.free()` never firing.
+        counter.register(name)
+        onDispose {
+            if (counter.unregister(name)) {
+                scopeHolder.free(scope.key)
+            }
+        }
+    }
+
+    return scope
+}
 
 @Composable
 fun scope(
@@ -20,15 +51,14 @@ fun scope(
     content: @Composable () -> Unit
 ) {
     val holder = scopeHolder ?: LocalScopeHolder.current
-    val counter = LocalScopeCounter.current
     val saver = LocalStateSaver.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Both keyed on `name`, not `Unit` - so a call site that switches which scope it mounts
+    // Keyed on `name`, not `Unit` - so a call site that switches which scope it mounts
     // (e.g. a tab switcher passing a different `name` without wrapping in `key()`) correctly
     // tears down the old scope and resolves the new one against its *current* `parameters`,
     // instead of silently keeping the scope (and params) captured on first mount.
-    val scope = remember(name) {
+    val scope = rememberOrLoadScope(name, holder) {
         holder.findOrLoad(name) {
             (parameters ?: emptyMap()) + saver.savedParams
         }
@@ -47,18 +77,9 @@ fun scope(
     }
 
     DisposableEffect(name) {
-        // register() lives here, not as a plain statement in the composable body - this makes
-        // it run exactly once per (name) mount, paired 1:1 with onDispose's unregister() below.
-        // A plain top-level call would re-run on every recomposition (e.g. every keystroke in a
-        // sibling text field), incrementing the counter without a matching decrement and
-        // leaving `holder.free()` never firing.
-        counter.register(name)
         scope + LifecycleEvents.VISIBLE
         onDispose {
             scope + LifecycleEvents.DISPOSED
-            if (counter.unregister(name)) {
-                holder.free(scope.key)
-            }
         }
     }
 
@@ -66,32 +87,6 @@ fun scope(
         content()
     }
 }
-
-/*@Composable
-fun scope(name: String, scopeHolder: ScopeHolder? = null, content: @Composable () -> Unit) {
-    val holder = scopeHolder ?: LocalScopeHolder.current
-    val counter = LocalScopeCounter.current
-
-    val scope = remember {
-        holder.findOrLoad(name)
-    }
-
-    counter.register(name)
-
-
-
-    DisposableEffect(Unit) {
-        onDispose {
-            if (counter.unregister(name)) {
-                holder.free(scope.key)
-            }
-        }
-    }
-
-    CompositionLocalProvider(LocalScope provides  scope) {
-        content()
-    }
-}*/
 
 @Composable
 fun ScopeHolder(block: () -> ScopeHolder, content: @Composable () -> Unit) {
@@ -102,15 +97,4 @@ fun ScopeHolder(block: () -> ScopeHolder, content: @Composable () -> Unit) {
     ) {
         content()
     }
-}
-
-@Composable
-fun<T: Event> Scope.external(clazz: KClass<T>, block: (T) -> Unit) {
-    /*LaunchedEffect(Unit) {
-        eventBus.external(clazz) {
-            if (clazz.isInstance(it)) {
-                block(it as T)
-            }
-        }
-    }*/
 }

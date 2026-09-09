@@ -2,8 +2,11 @@ package ru.alexey.event.threads.datacontainer
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import ru.alexey.event.threads.Builder
@@ -36,7 +39,7 @@ class ContainerBuilder {
 inline fun<reified T: Any> ScopeBuilder.datacontainer(
     source: ObservableResource<T>,
     crossinline block: DatacontainerBuilder<T>.() -> Unit
-) = ReadOnlyProperty<ScopeBuilder?, Datacontainer<T>> { thisRef, property ->
+) = ReadOnlyProperty<ScopeBuilder?, Datacontainer<T>> { _, _ ->
     val container = containerBuilder[T::class]
     if (container == null) {
         var transforms: List<Transform<out Any, T>>
@@ -48,9 +51,15 @@ inline fun<reified T: Any> ScopeBuilder.datacontainer(
             scope = it.coroutineScope
             watchers = it.watchers
         }
+        // A supervised child of the configured scope, not that scope itself: `realDataContainer`
+        // cancels whatever scope it's given when the container closes. Without this, a container
+        // declared with `.coroutineScope { viewModelScope }` (or any other scope the caller still
+        // needs elsewhere) would take that scope down entirely - and everything else backed by
+        // it - the moment this one container's owning Scope closes.
+        val containerScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
         val mutex = Mutex()
         with(containerBuilder) {
-            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { block: suspend (T) -> T ->
+            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, containerScope), containerScope) { block: suspend (T) -> T ->
                 mutex.withLock {
                     val new = block(source.value)
                     source.update { new }

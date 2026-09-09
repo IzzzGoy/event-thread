@@ -36,7 +36,6 @@ kotlin {
             dependencies {
                 api(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
-                implementation(libs.kotlin.reflect)
             }
         }
         val commonTest by getting {

@@ -5,7 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import ru.alexey.event.threads.Builder
 import kotlin.reflect.KClass
 
-class EventBussBuilder {
+class EventBusBuilder {
     private val interceptors = mutableListOf<Interceptor>()
     private val errorHandlers = mutableListOf<ErrorHandler>()
     private var coroutineScope: CoroutineScope? = null

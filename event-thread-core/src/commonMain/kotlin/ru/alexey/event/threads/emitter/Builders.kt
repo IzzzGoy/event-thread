@@ -19,6 +19,11 @@ class EmittersBuilder {
         emitterFactories.add(block)
     }
 
+    /** Copies [other]'s registered emitters into this builder - used when a scope `implements` another. */
+    fun merge(other: EmittersBuilder) {
+        emitterFactories += other.emitterFactories
+    }
+
     fun <T : Event> wrapFlow(flow: Flow<T>): Emitter<T> {
         return object : Emitter<T> {
             override val flow: Flow<T> = flow

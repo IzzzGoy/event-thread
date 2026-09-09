@@ -69,6 +69,8 @@ import ru.alexey.event.threads.resources.flowResource
 import ru.alexey.event.threads.resources.invoke
 import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.resources.resolveOrDefault
+import ru.alexey.event.threads.resources.resource
+import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import ru.alexey.event.threads.widget.createWidget
@@ -151,6 +153,13 @@ fun provideTodoScopeHolder() = scopeHolder {
             }
         }
 
+        // Scope scoped value
+        val json by resource {
+            valueResource(
+                dependencyProvider.get<Json>()
+            )
+        }
+
         // Reads always come from the in-memory Flow side; the JSON file is only ever read once
         // (to hydrate on first load) and then only ever written to, never re-read on every
         // add/toggle/delete. `Json` itself comes from `dependencyProvider` (see
@@ -159,7 +168,7 @@ fun provideTodoScopeHolder() = scopeHolder {
             cacheJsonResource(
                 key = scopeParams.resolveOrDefault("todos_default"),
                 initial = emptyList<Todo>(),
-                json = dependencyProvider.get<Json>()
+                json = json()()
             )
         ) {}
         val showCompleted by datacontainer(flowResource(true)) {}
