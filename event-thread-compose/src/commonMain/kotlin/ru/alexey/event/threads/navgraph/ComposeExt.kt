@@ -7,6 +7,12 @@ import ru.alexey.event.threads.LocalScopeHolder
 import ru.alexey.event.threads.rememberOrLoadScope
 import ru.alexey.event.threads.scopeholder.ScopeHolder
 
+/**
+ * Renders the current top-of-stack [Screen] for the navigation graph scope declared via
+ * [ru.alexey.event.threads.navgraph.navGraph] under [graphName], mounting that scope (from
+ * [holder], or [LocalScopeHolder] if omitted) for as long as this composable stays in
+ * composition. Renders nothing if the stack is empty.
+ */
 @Composable
 fun NavGraph(graphName: String, holder: ScopeHolder? = null) {
     val scopeHolder = holder ?: LocalScopeHolder.current

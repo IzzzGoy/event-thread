@@ -7,14 +7,21 @@ import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.datacontainer.Datacontainer
 
+/** Receiver for `emitters { }` (see [ru.alexey.event.threads.ScopeBuilder.emitters]) - registers
+ * external event sources that get collected into a scope's bus once it's built. */
 class EmittersBuilder {
     private val emitterFactories = mutableListOf<Scope.() -> Emitter<out Event>>()
+
+    /** Instantiates every registered emitter against [scope] and wires each one's [Emitter.flow]
+     * into `scope.eventBus` via [ru.alexey.event.threads.bus.EventBus.collectToEventBus]. Called
+     * once, from [ru.alexey.event.threads.Scope]'s own construction. */
     fun build(scope: Scope) = emitterFactories.map {
         with(scope) {
             it().also { eventBus.collectToEventBus(it.flow) }
         }
     }
 
+    /** Registers an emitter, built lazily from the owning [Scope] when [build] runs. */
     fun <T : Event> emitter(block: Scope.() -> Emitter<T>) {
         emitterFactories.add(block)
     }
@@ -24,6 +31,8 @@ class EmittersBuilder {
         emitterFactories += other.emitterFactories
     }
 
+    /** Wraps a plain [Flow] as an [Emitter] - the usual way to define one: `emitter {
+     * wrapFlow(someFlow) }`. */
     fun <T : Event> wrapFlow(flow: Flow<T>): Emitter<T> {
         return object : Emitter<T> {
             override val flow: Flow<T> = flow

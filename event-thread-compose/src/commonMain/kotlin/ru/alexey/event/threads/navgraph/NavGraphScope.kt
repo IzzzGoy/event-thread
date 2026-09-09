@@ -12,6 +12,15 @@ import ru.alexey.event.threads.resources.resource
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scopeholder.ScopeHolderBuilder
 
+/**
+ * Declares a navigation graph scope named [name]: dispatching any [PUSH]-typed
+ * [NavigationDestination] event anywhere in the app pushes the matching [Screen] (registered via
+ * [builder], see [NavGraphBuilder.bind]) onto this graph's back stack, rendered by
+ * [ru.alexey.event.threads.navgraph.NavGraph] (the composable). [first] is the initial screen,
+ * pushed automatically via an emitter as soon as the scope loads. [PopUp]/[PopToScreen] pop the
+ * stack; popping the last screen leaves it as the sole remaining entry rather than emptying the
+ * stack.
+ */
 inline fun <reified PUSH : NavigationDestination> ScopeHolderBuilder.navGraph(
     name: String,
     first: PUSH,

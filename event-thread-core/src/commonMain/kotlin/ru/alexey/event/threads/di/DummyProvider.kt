@@ -13,6 +13,8 @@ import kotlin.reflect.KClass
 class DummyProvider : DependencyProvider {
     private val registry = mutableMapOf<Pair<KClass<*>, Qualifier?>, (Parameters) -> Any>()
 
+    /** Registers [factory] to build [T] on demand for [clazz]/[qualifier] - lazy: nothing runs
+     * until [get]/[getOrNull] is actually called. */
     fun <T : Any> register(clazz: KClass<T>, qualifier: Qualifier? = null, factory: (Parameters) -> T) {
         registry[clazz to qualifier] = factory
     }
@@ -26,9 +28,11 @@ class DummyProvider : DependencyProvider {
         registry[clazz to qualifier]?.invoke(parameters) as? T
 }
 
+/** [DummyProvider.register] with [T] inferred from the reified type parameter. */
 inline fun <reified T : Any> DummyProvider.register(
     qualifier: Qualifier? = null,
     noinline factory: (Parameters) -> T
 ) = register(T::class, qualifier, factory)
 
+/** Builds a [DummyProvider] and applies [block] to register its dependencies. */
 fun dummyProvider(block: DummyProvider.() -> Unit): DummyProvider = DummyProvider().apply(block)

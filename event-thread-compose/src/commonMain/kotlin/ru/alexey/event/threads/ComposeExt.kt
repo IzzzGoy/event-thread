@@ -43,6 +43,15 @@ internal fun rememberOrLoadScope(
     return scope
 }
 
+/**
+ * Mounts the named scope for as long as this composable stays in composition: finds or loads it
+ * (from [scopeHolder], or [LocalScopeHolder] if omitted), provides it as [LocalScope] to
+ * [content], forwards Android/lifecycle state changes and mount/unmount timing into it as
+ * [LifecycleEvents], and frees it via [ScopeHolder.free] once the last mounted user of [name]
+ * unmounts (see [ScopeCounter]). Re-mounting under a different [name] (e.g. a tab switcher)
+ * correctly tears down the old scope and resolves the new one against the [parameters] current
+ * at that point, without needing `key()` at the call site.
+ */
 @Composable
 fun scope(
     name: String,
@@ -88,6 +97,9 @@ fun scope(
     }
 }
 
+/** Composition root for this library: provides a freshly built [ScopeHolder] (from [block]) as
+ * [LocalScopeHolder], plus a fresh [ScopeCounter] and [DefaultStateSaver], for [content] and
+ * everything below it. Call once near the top of the app. */
 @Composable
 fun ScopeHolder(block: () -> ScopeHolder, content: @Composable () -> Unit) {
     CompositionLocalProvider(

@@ -10,25 +10,58 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import ru.alexey.event.threads.EventThread
 import ru.alexey.event.threads.EventThreadInfo
+import ru.alexey.event.threads.utils.update
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.reflect.KClass
 
+/** Marker for anything dispatchable through an [EventBus]. */
 interface Event
 
+/**
+ * An [Event] dispatched to exactly its own registered `thread<T>()`, not to handlers registered
+ * for a supertype - see [EventBus.dispatchToSubscribers]'s `is StrictEvent` branch. Prefer this
+ * over a plain [Event] unless you specifically need supertype-based (`isInstance`) matching.
+ */
 interface StrictEvent : Event
+
+/** An [Event] dispatched to every registered `thread<T>()` whose type `isInstance` of it - so a
+ * handler registered for a supertype also receives subtypes. See [StrictEvent] for the
+ * exact-type-only alternative. */
 interface ExtendableEvent : Event
 
+/** The public contract [EventBus] implements - see [EventBus] for the concrete behavior/
+ * thread-safety guarantees. */
 interface IEventBus {
+    /** Every event this bus has processed (via [dispatchToSubscribers]/`+=`), replayed once to a
+     * late collector - see [EventBus._output]'s KDoc for why replay = 1. */
     val output: SharedFlow<Event>
+
+    /** This bus's registered event threads, keyed by event class name - see [EventBus.metadata]. */
     val metadata: Map<String, EventThreadInfo>
 
+    /** Dispatches [event] onto this bus. Thread-safe; does not suspend. */
     operator fun plusAssign(event: Event)
 
+    /** Feeds every value of [events] into this bus as if dispatched via [plusAssign], for the
+     * lifetime of the bus (or until [events] completes). See [EventBus.collectToEventBus] for
+     * failure handling. */
     fun collectToEventBus(events: Flow<Event>)
 }
 
 private data object EmitterFailure : Event
 
-@OptIn(ExperimentalStdlibApi::class)
+/**
+ * **Thread-safety:** [plusAssign]/`+=` and [collectToEventBus] are safe to call from any thread -
+ * `Channel.trySend` is inherently thread-safe. The subscriber registry ([Scope.thread]-backed) is
+ * also safe to mutate concurrently with dispatch: it's a lock-free copy-on-write snapshot (see
+ * [ru.alexey.event.threads.utils.update]) specifically because `Scope.thread<T>()` is a public,
+ * ordinary function - nothing stops an app from registering a new handler on a live scope from a
+ * background thread while events are already flowing through it. What is NOT synchronized here:
+ * whatever an individual action/watcher does internally with its own state - that's the
+ * registering code's own responsibility, same as any other coroutine-based callback.
+ */
+@OptIn(ExperimentalStdlibApi::class, ExperimentalAtomicApi::class)
 class EventBus(
     parentScope: CoroutineScope,
     private val watchers: List<Interceptor>,
@@ -45,9 +78,20 @@ class EventBus(
         parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job])
     )
 
-    private val channel: Channel<Event> = Channel(Channel.BUFFERED)
-    private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
-    private val mergedSubscribers: MutableMap<KClass<out Event>, MutableList<EventThread<out Event>>> = mutableMapOf()
+    // Unlimited, not a bounded buffer: a bounded channel's `trySend` starts failing once full,
+    // and the old fallback for that (`coroutineScope.launch { channel.send(event) }` per rejected
+    // event) meant a sustained producer/consumer imbalance grew the coroutine count without
+    // bound - each one far heavier than the `Event` reference it's holding onto. An unbounded
+    // channel turns the same "producer outruns the dispatch loop" scenario into an ordinary
+    // growing queue of event references instead, which is strictly cheaper - it doesn't remove
+    // the underlying problem (nothing can, short of the producer slowing down or `+=` becoming
+    // suspending - it's a plain operator, so no in-band backpressure is possible), it just makes
+    // sustained overload degrade in memory instead of in coroutine-scheduler overhead.
+    private val channel: Channel<Event> = Channel(Channel.UNLIMITED)
+    private val subscribersRef = AtomicReference<Map<KClass<out Event>, EventThread<out Event>>>(emptyMap())
+    private val mergedSubscribersRef = AtomicReference<Map<KClass<out Event>, List<EventThread<out Event>>>>(emptyMap())
+    private val subscribers: Map<KClass<out Event>, EventThread<out Event>> get() = subscribersRef.load()
+    private val mergedSubscribers: Map<KClass<out Event>, List<EventThread<out Event>>> get() = mergedSubscribersRef.load()
 
     // replay = 1, not 0: a plain zero-buffer SharedFlow delivers an emitted value only to
     // whoever is *already* collecting at that exact moment - with zero subscribers it's just
@@ -182,10 +226,12 @@ class EventBus(
     }
 
     override operator fun plusAssign(event: Event) {
-        // trySend is synchronous and non-suspending - with the default buffered channel this
-        // succeeds immediately without spawning a coroutine. Only fall back to a suspending
-        // send (which needs its own coroutine) when the buffer is actually full.
-        if (channel.trySend(event).isFailure) {
+        // trySend is synchronous, non-suspending and thread-safe. With an unlimited channel it
+        // only ever fails once this bus has been `close()`d (the channel itself is closed) - in
+        // that case there's no reader left to deliver to, so drop the event instead of launching
+        // a coroutine doomed to throw `ClosedSendChannelException` trying to send into it.
+        val result = channel.trySend(event)
+        if (result.isFailure && !result.isClosed) {
             coroutineScope.launch {
                 channel.send(event)
             }
@@ -195,10 +241,10 @@ class EventBus(
     @PublishedApi
     internal operator fun<T> invoke(clazz: KClass<T>, action: () -> EventThread<T>) where T: Event {
         val thread = action()
-        if (thread.eventMetadatas.metadata.override || subscribers[clazz] == null) {
-            subscribers[clazz] = thread
+        if (thread.eventMetadatas.metadata.override || subscribersRef.load()[clazz] == null) {
+            subscribersRef.update { it + (clazz to thread) }
         } else {
-            mergedSubscribers.getOrPut(clazz) { mutableListOf() }.add(thread)
+            mergedSubscribersRef.update { current -> current + (clazz to (current[clazz].orEmpty() + thread)) }
         }
     }
 

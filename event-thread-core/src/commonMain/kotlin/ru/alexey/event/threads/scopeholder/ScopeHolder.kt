@@ -18,6 +18,8 @@ import ru.alexey.event.threads.ScopeBuilder
 import ru.alexey.event.threads.di.DependencyProvider
 import ru.alexey.event.threads.di.DummyProvider
 import ru.alexey.event.threads.resources.Parameters
+import ru.alexey.event.threads.utils.removeAndGet
+import ru.alexey.event.threads.utils.update
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.reflect.KClass
@@ -27,25 +29,18 @@ internal class ExternalEventDefinition(
     val event: Event
 )
 
-// Lock-free copy-on-write update: retries the transform against a fresh snapshot until the CAS
-// succeeds, so a mutation is never lost to a concurrent one (see [ScopeHolder.activeRef]).
-@OptIn(ExperimentalAtomicApi::class)
-private fun <T> AtomicReference<T>.update(transform: (T) -> T) {
-    while (true) {
-        val current = load()
-        if (compareAndSet(current, transform(current))) return
-    }
-}
-
-@OptIn(ExperimentalAtomicApi::class)
-private fun <K, V> AtomicReference<Map<K, V>>.removeAndGet(key: K): V? {
-    while (true) {
-        val current = load()
-        val removed = current[key] ?: return null
-        if (compareAndSet(current, current - key)) return removed
-    }
-}
-
+/**
+ * Owns the lifecycle of every named [Scope] in the app: builds/frees them on demand, resolves
+ * `implements`/`dependsOn` graphs, and routes events declared `consume`-able between scopes.
+ *
+ * **Thread-safety:** every public method here (`load`/`free`/`find`/`findOrLoad`/`plus`/`close`)
+ * is safe to call concurrently from any thread. The active-scope and routing-job registries are
+ * lock-free copy-on-write snapshots (see [ru.alexey.event.threads.utils.update]) specifically so
+ * that a UI-thread `findOrLoad`/`free` call and the background external-routing loop below can
+ * race freely without corrupting shared state. This only covers `ScopeHolder`'s own bookkeeping,
+ * not what a resolved [Scope]'s containers/threads do internally - see [ru.alexey.event.threads.bus.EventBus]'s
+ * own thread-safety note for that.
+ */
 @OptIn(ExperimentalStdlibApi::class, ExperimentalAtomicApi::class)
 class ScopeHolder(
     val external: Map<KClass<out Event>, List<String>>,
