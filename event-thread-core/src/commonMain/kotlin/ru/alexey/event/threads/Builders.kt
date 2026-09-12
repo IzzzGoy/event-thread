@@ -233,13 +233,20 @@ abstract class Scope : KeyHolder, AutoCloseable {
 
     /** Chains a cascading step onto this thread: when [T] is dispatched, runs [factory] and
      * dispatches its result as a new event. Returns `this` so further `.then`/`.end` calls can
-     * chain onto the same thread. */
+     * chain onto the same thread.
+     *
+     * [factory]'s receiver is a [ThreadActionScope]: if this thread declared `output<T>()`
+     * (see [EventThreadMetadataBuilder.output]), both [factory]'s returned event and any
+     * additional `eventBus += ` call made directly inside it are validated against that
+     * declaration - see [ThreadActionScope]/[ru.alexey.event.threads.bus.ValidatingEventBus]. A
+     * thread with no `output<T>()` declared behaves exactly as before: unrestricted. */
     @Builder
     inline infix fun <reified T : Event, reified OTHER : Event> EventThread<T>.then(
-        crossinline factory: suspend (T) -> OTHER
+        crossinline factory: suspend ThreadActionScope.(T) -> OTHER
     ): EventThread<T> {
-        val action = EventThreadActionBuilder<T>(EventType.cascade) {
-            eventBus += factory(it)
+        val action = EventThreadActionBuilder<T>(EventType.cascade, OTHER::class) {
+            val threadScope = ThreadActionScope(this@Scope, T::class.simpleName.orEmpty(), it, declaredOutputs)
+            threadScope.eventBus += threadScope.factory(it)
         }
         invoke(action.build())
         return this
@@ -247,27 +254,37 @@ abstract class Scope : KeyHolder, AutoCloseable {
 
     /** Chains a modification step onto this thread: when [T] is dispatched, updates
      * [datacontainer] by applying [factory] to its current value and the event. Returns `this`
-     * so further `.then`/`.end` calls can chain onto the same thread. */
+     * so further `.then`/`.end` calls can chain onto the same thread.
+     *
+     * [factory]'s receiver is a [ThreadActionScope] - see the cascading `.then` overload's KDoc
+     * for what that means for any `eventBus += ` call made directly inside it. */
     @Builder
     inline fun <reified T : Event, reified TYPE : Any> EventThread<T>.then(
         datacontainer: Datacontainer<TYPE>,
-        crossinline factory: suspend (TYPE, T) -> TYPE
+        crossinline factory: suspend ThreadActionScope.(TYPE, T) -> TYPE
     ): EventThread<T> {
         val action = EventThreadActionBuilder<T>(EventType.modification) {
-            datacontainer.update { current -> factory(current, it) }
+            val threadScope = ThreadActionScope(this@Scope, T::class.simpleName.orEmpty(), it, declaredOutputs)
+            datacontainer.update { current -> threadScope.factory(current, it) }
         }
         invoke(action.build())
         return this
     }
 
     /** Terminal step for this thread: when [T] is dispatched, runs [block] as a plain consuming
-     * side effect - no further chaining, no new event dispatched. Returns `this`. */
+     * side effect - no further chaining, no new event dispatched. Returns `this`.
+     *
+     * [block]'s receiver is a [ThreadActionScope] - see the cascading `.then` overload's KDoc for
+     * what that means for any `eventBus += ` call made directly inside it (the common case: a
+     * `consume` step that conditionally reports a verdict back as a new event, like `TodoDomain`'s
+     * `AddLimitReached` in the sample app). */
     @Builder
     inline infix fun <reified T : Event> EventThread<T>.end(
-        crossinline block: suspend (T) -> Unit
+        crossinline block: suspend ThreadActionScope.(T) -> Unit
     ): EventThread<T> {
         val action = EventThreadActionBuilder<T>(EventType.consume) {
-            block(it)
+            val threadScope = ThreadActionScope(this@Scope, T::class.simpleName.orEmpty(), it, declaredOutputs)
+            threadScope.block(it)
         }
         invoke(action.build())
         return this

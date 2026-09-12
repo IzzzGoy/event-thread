@@ -47,6 +47,13 @@ commonMain {
         implementation("io.github.izzzgoy:event-thread-secure:$event_thread_version")
     }
 }
+
+commonTest {
+    dependencies {
+        // static event-flow graph checks + the scenario/dynamic test DSL - see §10 Testing
+        implementation("io.github.izzzgoy:event-thread-test:$event_thread_version")
+    }
+}
 ```
 
 > **⚠️ `event-thread-network` and `event-thread-secure` are on pause.** Both have known,
@@ -334,6 +341,97 @@ the same event type won't end up echoing it back and forth.
 This is the mechanism behind a headless "domain" scope that talks to UI scopes purely through
 events - see the [scenarios](#common-scenarios) below.
 
+### 10. Testing
+
+`event-thread-test` is a separate, test-only module (add it to `commonTest`, see
+[Installation](#installation)) with two complementary tools: a **static** event-flow graph built
+from a scope's declared metadata (what *could* happen), and a **runtime scenario DSL** built on a
+real dispatch trace (what *did* happen in one run). Neither needs anything beyond a normal
+`ScopeHolder`/`scopeEmbedded` declaration - no test-only API on the production side.
+
+#### Static event-flow graph
+
+Every cascading `.then { event -> otherEvent }` records the event type it produces, inferred from
+the lambda's return type - `ScopeMetadata.toEventGraph()` / `ScopeHolderMetadata.toEventGraph()`
+turn that into an `EventGraph` you can assert against with a track-shaped DSL:
+
+```kotlin
+import ru.alexey.event.threads.test.graph.invoke // needed for the `graph("Scope") { }` operator
+import ru.alexey.event.threads.scopeholder.generateActiveSchema
+
+val holder = provideScopeHolder()
+holder.findOrLoad("Todos")
+val graph = holder.generateActiveSchema().toEventGraph()
+
+graph("Todos") {
+    reaches("AddTodo", "TodoAdded")       // a direct, literal hop - not just "eventually reachable"
+    doesNotReach("SomethingUnhandled")    // negation of the one-arg reaches()
+    orphan("ReceiptEmailQueued")          // produced by a cascade, but nothing handles it
+}
+graph.assertNoCycles()                    // advisory only - legitimate retry/convergent loops exist
+```
+
+`reaches(a, b, c)` checks the *literal* chain `a -> b -> c`, hop by hop - it deliberately rejects a
+transitive shortcut (`reaches("A", "C")` fails if only `A -> B -> C` exists, not a direct `A -> C`).
+Only the pure return-based `.then { }` shape is captured; an imperative `eventBus += event` inside a
+`.then`/`.end` body stays invisible to the static graph (it's still visible at runtime - see below).
+
+#### Scenario/dynamic tests
+
+For asserting what a scope actually did during one real, deterministic dispatch - not what its
+declared shape allows - wire a `ScenarioRecorder` into the scope's own bus config and drive it under
+`kotlinx-coroutines-test`:
+
+```kotlin
+import ru.alexey.event.threads.test.scenario.*
+import kotlinx.coroutines.test.advanceUntilIdle
+
+fun provideScopeHolder(busScope: CoroutineScope, recorder: ScenarioRecorder? = null) = scopeHolder {
+    scopeEmbedded("Todos") {
+        config {
+            createEventBus {
+                coroutineScope { busScope }                       // share one TestDispatcher - see below
+                if (recorder != null) recordInto(recorder, "Todos")
+            }
+        }
+        // ...containers/threads as usual...
+    }
+}
+
+@Test
+fun addingATodoCascadesAndUpdatesState() = runScenario(::provideScopeHolder) { holder, _, recorder ->
+    val todos = holder.findOrLoad("Todos")
+    todos + AddTodo("Buy milk")
+    advanceUntilIdle()
+
+    scenario(recorder) {
+        scope("Todos") {
+            expectEvents("AddTodo", "TodoAdded")                  // exact, ordered, per-scope trace
+            expectState(todos.resolveOrThrow(), listOf(Todo(0, "Buy milk")))
+        }
+    }
+}
+```
+
+`runScenario` handles the boilerplate: a fresh `ScenarioRecorder`, one `TestDispatcher`-backed
+`CoroutineScope` shared by every scope under test, and closing the holder afterward. Two things
+worth knowing about how this stays deterministic:
+
+- **Every scope under test must share that one `TestDispatcher`** (`coroutineScope { busScope }`
+  above) so `advanceUntilIdle()` can actually drive its dispatch to completion before assertions
+  run - a scope left on its default `Dispatchers.Default` races real time instead.
+- **The recorder is wired via `watcher { }`, not `EventBus.output`** - deliberately. Every scope
+  loaded through a `ScopeHolder` already gets a second, real-thread collector attached to `output`
+  internally (for `consume`-routing bookkeeping, §9), and its one-slot replay buffer can make a
+  later emission block on that real collector's own scheduling - invisible to and unresolvable by
+  `advanceUntilIdle()`. A `watcher { }` call is a plain synchronous function invoked inside the
+  dispatch coroutine itself, so it has no such race. One consequence: `expectEvents` only sees
+  events that actually matched a `thread<T>()` (same as any other `watcher { }`) - an orphaned
+  event is invisible to it, same as it is to the static graph.
+- Cross-scope ordering is deliberately not asserted by `expectEvents` - only order *within* one
+  scope is guaranteed. To pin a cross-scope effect, assert the downstream scope's settled state
+  with `expectState` instead of relying on event ordering between two scopes.
+
 ***
 
 ## Common scenarios
@@ -365,4 +463,9 @@ Quick "I want to do X" → "use Y" pointers into the walkthrough above.
   `NavGraph` composable (§7), not inside one destination's own screen - only the top of the nav
   stack is ever composed, so a scope scoped to a single destination is disposed the moment you
   navigate elsewhere.
+- **Pinning down a scope's event-flow shape, or asserting what a real dispatch actually did.**
+  `event-thread-test` (§10): the static `EventGraph`/`graph("Scope") { reaches(...) }` DSL for
+  "what could happen" (orphans, cycles, cascade shape), or `runScenario`/`scenario(recorder) {
+  scope(name) { expectEvents(...); expectState(...) } }` for "what actually happened" in one
+  deterministic run.
 

@@ -179,6 +179,13 @@ class EventBus(
         }
     }
 
+    /** Fire-and-forget version of [notifyError], for a caller (specifically [ValidatingEventBus])
+     * that can't itself be suspend - the same "launch and don't wait" pattern [plusAssign] already
+     * uses for its own channel-full fallback. */
+    internal fun reportErrorAsync(event: Event, error: Throwable) {
+        coroutineScope.launch { notifyError(event, error) }
+    }
+
     private suspend fun notifyError(event: Event, error: Throwable) {
         if (errorHandlers.isEmpty()) {
             println("EventBus: unhandled exception while processing $event: $error")

@@ -49,6 +49,8 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(project(":event-thread-test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
 
         androidMain.dependencies {

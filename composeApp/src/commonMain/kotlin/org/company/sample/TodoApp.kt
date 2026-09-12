@@ -133,7 +133,9 @@ fun provideTodoScopeHolder() = scopeHolder {
         totalAdded.value
 
         threads {
-            thread<AddTodo>().then(totalAdded) { state, _ ->
+            thread<AddTodo>{
+                output<AddLimitReached>()
+            }.then(totalAdded) { state, _ ->
                 state + 1
             }.end {
                 if (totalAdded.value >= ADD_LIMIT) {

@@ -23,6 +23,7 @@ plugins {
 
 rootProject.name = "research"
 include("event-thread-core")
+include("event-thread-test")
 include("event-thread-cache")
 include("event-thread-secure")
 include("event-thread-compose")
