@@ -30,6 +30,10 @@ actual fun <T> jsonCache(path: String, json: Json, serializer: KSerializer<T>): 
         }
 
         override fun write(obj: T) {
+            // Not normally reachable on iOS - NSCachesDirectory (see PathTo.kt) always exists -
+            // but a `key` containing "/" would still hit a missing intermediate directory, and
+            // it's a no-op once the directory exists, so this costs nothing on every later write.
+            path.toPath().parent?.let { FileSystem.SYSTEM.createDirectories(it, mustCreate = false) }
             sink.buffer().use {
                 it.write(
                     json.encodeToString(serializer, obj).encodeToByteArray()
@@ -58,6 +62,7 @@ actual fun <T> binaryCache(
         }
 
         override fun write(obj: T) {
+            path.toPath().parent?.let { FileSystem.SYSTEM.createDirectories(it, mustCreate = false) }
             sink.buffer().use {
                 it.write(cbor.encodeToByteArray(serializer, obj).toByteString()).flush()
             }

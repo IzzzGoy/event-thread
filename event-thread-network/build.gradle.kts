@@ -1,6 +1,10 @@
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.android.library)
+    // Only needed for this module's own tests - production code's `T`s are always supplied by
+    // the caller's own module (which applies its own serialization plugin); a `@Serializable`
+    // test fixture class declared *inside* this module needs it too, though.
+    alias(libs.plugins.serialization)
     id("convention.publication-network")
     checkstyle
 }
@@ -51,6 +55,7 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.ktor.client.mock)
             }
         }
     }

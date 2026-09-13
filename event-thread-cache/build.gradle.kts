@@ -1,6 +1,11 @@
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.android.library)
+    // Only needed for this module's own tests: `cacheJsonResource`/`cacheBinaryResource`'s
+    // `serializer<T>()` calls are inline/reified, so they resolve at whatever call site supplies
+    // a concrete `T` - production code never needs this module's own compiler plugin, only a test
+    // `@Serializable` class declared *inside* this module (jvmTest) does.
+    alias(libs.plugins.serialization)
     id("convention.publication-cache")
 }
 
@@ -61,6 +66,13 @@ kotlin {
         androidMain {
             dependencies {
                 implementation(libs.kstore.file)
+            }
+        }
+
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
     }

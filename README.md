@@ -56,13 +56,57 @@ commonTest {
 }
 ```
 
-> **⚠️ `event-thread-network` and `event-thread-secure` are on pause.** Both have known,
-> unfixed correctness issues (a shared `HttpClient` closed after the first request, a
-> `WebSocket` resource with no reconnect handling, an encrypted resource whose `update()` is a
-> no-op, an encryption key derived from a non-cryptographic seeded PRNG) and no active
-> maintenance right now - somewhere between *deprecated* and *outdated*, not a recommendation
-> against a future fix. Don't build on them for new code; `event-thread-core` +
-> `event-thread-compose` + `event-thread-cache` are the maintained set.
+`event-thread-network` wraps [ktor-client](https://ktor.io) HTTP calls and WebSocket connections.
+There's no `Resource`/`unwrap()` wrapper for HTTP - `HttpClient.getBody`/`postBody`/`putBody`/
+`deleteBody` are plain suspend functions returning `T` directly, meant to be called wherever a
+suspend function already fits (most naturally inside a `.then(container) { current, event -> ...
+}` step, the same shape `event-thread-cache`/`event-thread-secure`'s own `update { }` use for I/O):
+
+```kotlin
+import ru.alexey.event.threads.getBody
+
+thread<RefreshUsers>().then(users) { _, event -> httpClient.getBody("/users") }
+```
+
+`httpClient` is always caller-owned - nothing in this module closes it, so the same client can be
+shared and reused across as many calls as you like.
+
+`webSocketResource` is a proper `ObservableResource<T>`: incoming frames update its value,
+`update { }` sends one out, and it reconnects automatically (after `reconnectDelayMs`, default
+3s) whenever the connection drops - report failures via its `onError` callback if you want to
+observe them.
+
+```kotlin
+import ru.alexey.event.threads.webSocketResource
+
+val liveScore by datacontainer(
+    webSocketResource("scores.example.com", 443, "/live", httpClient, scope, initial = Score(0, 0))
+) { }
+```
+
+`event-thread-secure` wraps [KVault](https://github.com/liftric/kvault) (Android Keystore /
+iOS Keychain-backed key-value storage) and [Realm](https://github.com/realm/realm-kotlin) behind
+the same `ObservableResource`/`Datacontainer` shape as `event-thread-cache`:
+
+```kotlin
+import ru.alexey.event.threads.secure.secureResource
+import kotlinx.serialization.cbor.Cbor
+
+val settings by datacontainer(secureResource("settings", Settings(), Cbor)) { }
+```
+
+The Realm-backed path (`createConfig`/`secureDatabase`) generates its 64-byte encryption key once
+via the platform's real CSPRNG (through `cryptography-core`'s JDK/Apple providers) and persists it
+in the same KVault-backed store under a caller-supplied `keyAlias`, so the same key is reused every
+time the database is reopened:
+
+```kotlin
+import ru.alexey.event.threads.secure.createConfig
+
+val config = createConfig(MyRealmObject::class, keyAlias = "my-database") {
+    schemaVersion(1)
+}
+```
 
 ***
 

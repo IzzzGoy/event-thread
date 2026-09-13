@@ -28,10 +28,15 @@ value class ScopeCounter(
     }
 
     /** Marks one mounted user of [name] as gone; returns `true` once the count reaches zero
-     * (meaning the caller should now free the scope). */
+     * (meaning the caller should now free the scope). Unregistering a [name] with no matching
+     * [register] call (nothing currently mounted under it) is a safe no-op returning `false` -
+     * the previous version defaulted an absent [name] to a count of 1, so an *unbalanced*
+     * `unregister` (no matching `register`) silently returned `true` as if a real last-user-gone
+     * transition had happened, telling the caller to free a scope this call had no claim on. */
     fun unregister(name: String): Boolean {
-        val next = counts.getOrElse(name) { 1 } - 1
-        return if (next == 0) {
+        val current = counts[name] ?: return false
+        val next = current - 1
+        return if (next <= 0) {
             counts.remove(name)
             true
         } else {

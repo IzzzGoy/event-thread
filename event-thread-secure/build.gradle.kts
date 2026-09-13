@@ -55,7 +55,7 @@ kotlin {
 }
 
 android {
-    namespace = "ru.alexey.event.threads.cache"
+    namespace = "ru.alexey.event.threads.secure"
     compileSdk = 36
     defaultConfig {
         minSdk = 24
