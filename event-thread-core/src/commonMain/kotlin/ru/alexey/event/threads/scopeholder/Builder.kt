@@ -6,6 +6,8 @@ import ru.alexey.event.threads.ScopeBuilder
 import ru.alexey.event.threads.di.DependencyProvider
 import ru.alexey.event.threads.di.DummyProvider
 import ru.alexey.event.threads.resources.Parameters
+import ru.alexey.event.threads.scopeholder.typed.ScopeKey
+import ru.alexey.event.threads.scopeholder.typed.resolveTyped
 import kotlin.reflect.KClass
 
 /**
@@ -13,6 +15,12 @@ import kotlin.reflect.KClass
  * plus the `dependsOn`/`implements`/`consume` graphs between them, before [build] produces the
  * live [ScopeHolder]. Nothing declared here is built eagerly: [scopeEmbedded]/[scope] just
  * register a factory, actually invoked on first `load`/`findOrLoad`.
+ *
+ * [scopeEmbedded]/[scope]/`dependsOn`/`implements`/`consume` all have a [ScopeKey]-keyed overload
+ * alongside the original `String`-keyed one - same immediate, single-block registration, just
+ * typed. Reach for `ScopeKey.by`/`ScopeKey.extend`/`Scope.of` + `include(...)`
+ * (`scopeholder.typed` package) instead only when a scope's declaration or content actually needs
+ * composing from more than one call site/module.
  */
 class ScopeHolderBuilder {
 
@@ -21,6 +29,21 @@ class ScopeHolderBuilder {
     private val dependencies: MutableMap<String, List<String>> = mutableMapOf()
     private val implementations: MutableMap<String, List<String>> = mutableMapOf()
     private var dependencyProvider: DependencyProvider = DummyProvider()
+
+    // Lets an external DSL layer (see `ru.alexey.event.threads.scopeholder.typed.include`) defer
+    // its own registration until [build] is actually reached, instead of committing eagerly per
+    // call - needed because a scope's typed config can arrive in pieces across several calls (one
+    // module's own declaration, another module's `extend`), and this builder's own
+    // dependsOn/implements/consume/scopeEmbedded all *replace* rather than merge on repeat calls
+    // for the same key. Deliberately untyped (`ScopeHolderBuilder.() -> Unit`, no dependency on any
+    // specific external DSL's types) so this stays a generic hook, not a typed-layer-specific one.
+    private val onBuildActions = mutableListOf<ScopeHolderBuilder.() -> Unit>()
+
+    /** Registers [action] to run against this builder just before [build] assembles the final
+     * [ScopeHolder] - runs in registration order, after everything else declared in this block. */
+    fun onBuild(action: ScopeHolderBuilder.() -> Unit) {
+        onBuildActions += action
+    }
 
     /** Sets the [DependencyProvider] every declared scope's [ScopeBuilder] gets by default. */
     @Builder
@@ -41,6 +64,7 @@ class ScopeHolderBuilder {
 
     /** Builds the [ScopeHolder]. */
     fun build(): ScopeHolder {
+        onBuildActions.forEach { it() }
         return ScopeHolder(
             external = external,
             factories = factories,
@@ -57,6 +81,23 @@ class ScopeHolderBuilder {
         factories[key] = { params, parents ->
             ScopeBuilder(key, parents, dependencyProvider).apply { init(params) }
         }
+    }
+
+    /** [scopeEmbedded], keyed by a typed [ScopeKey] instead of a raw `String` - the same
+     * single-block, declare-and-build-right-here style the `String` overload has always had, just
+     * typed: registers immediately, right here, no `ScopeKey.by`/`Scope.of` + `include(...)`
+     * indirection required. Reach for that pair instead only once this scope's declaration or
+     * content actually needs composing from more than one place (see `typed/Ext.kt`'s KDoc) -
+     * a plain single-owner scope never needs it. */
+    @Suppress("UNCHECKED_CAST")
+    fun <P : Any> scopeEmbedded(key: ScopeKey<P>, init: ScopeBuilder.(P) -> Unit) {
+        scopeEmbedded(key.identity) { parameters -> init(parameters.resolveTyped() as P) }
+    }
+
+    /** [scope], keyed by a typed [ScopeKey] instead of a raw `String`. */
+    fun <P : Any> scope(key: ScopeKey<P>, init: ScopeBuilder.(P) -> Unit): ScopeKey<P> {
+        scopeEmbedded(key, init)
+        return key
     }
 
     /** Declares that events of type [key] should be routed to [receivers] (by scope key) via
@@ -82,6 +123,17 @@ class ScopeHolderBuilder {
         external[this] = receivers()
     }
 
+    /** [consume], keyed by a typed [ScopeKey] instead of a raw `String`. */
+    infix fun KClass<out Event>.consume(receiver: ScopeKey<*>) {
+        external[this] = listOf(receiver.identity)
+    }
+
+    /** [consume] with multiple receiver scope keys - `Collection`, not `List`, purely so this
+     * overload's erased parameter type doesn't clash on the JVM with the `String` one's `List`. */
+    infix fun KClass<out Event>.consume(receivers: Collection<ScopeKey<*>>) {
+        external[this] = receivers.map { it.identity }
+    }
+
     /** `"child" dependsOn "parent"` - loading `"child"` also loads `"parent"`, and `"parent"` is
      * only freed once no other active scope still depends on it (see [ScopeHolder.free]). */
     infix fun String.dependsOn(key: String) {
@@ -96,6 +148,21 @@ class ScopeHolderBuilder {
     /** [dependsOn], with the dependency list computed lazily. */
     infix fun String.dependsOn(keys: () -> List<String>) {
         dependencies[this] = keys()
+    }
+
+    /** [dependsOn], keyed by a typed [ScopeKey] instead of a raw `String`. */
+    infix fun ScopeKey<*>.dependsOn(key: ScopeKey<*>) {
+        dependencies[identity] = listOf(key.identity)
+    }
+
+    /** [dependsOn] with multiple dependency keys. */
+    infix fun ScopeKey<*>.dependsOn(keys: List<ScopeKey<*>>) {
+        dependencies[identity] = keys.map { it.identity }
+    }
+
+    /** [dependsOn], with the dependency list computed lazily. */
+    infix fun ScopeKey<*>.dependsOn(keys: () -> List<ScopeKey<*>>) {
+        dependencies[identity] = keys().map { it.identity }
     }
 
     /** `"child" implements "base"` - `"child"`'s [ScopeBuilder] inherits `"base"`'s config/
@@ -113,6 +180,21 @@ class ScopeHolderBuilder {
     /** [implements], with the parent list computed lazily. */
     infix fun String.implements(keys: () -> List<String>) {
         implementations[this] = keys()
+    }
+
+    /** [implements], keyed by a typed [ScopeKey] instead of a raw `String`. */
+    infix fun ScopeKey<*>.implements(key: ScopeKey<*>) {
+        implementations[identity] = listOf(key.identity)
+    }
+
+    /** [implements] with multiple parent keys. */
+    infix fun ScopeKey<*>.implements(keys: List<ScopeKey<*>>) {
+        implementations[identity] = keys.map { it.identity }
+    }
+
+    /** [implements], with the parent list computed lazily. */
+    infix fun ScopeKey<*>.implements(keys: () -> List<ScopeKey<*>>) {
+        implementations[identity] = keys().map { it.identity }
     }
 }
 

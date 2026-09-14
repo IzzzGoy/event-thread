@@ -58,6 +58,7 @@ import org.koin.dsl.module
 import ru.alexey.event.threads.LifecycleEvents
 import ru.alexey.event.threads.LocalScope
 import ru.alexey.event.threads.LocalScopeHolder
+import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.cache.cacheJsonResource
 import ru.alexey.event.threads.datacontainer.datacontainer
 import ru.alexey.event.threads.di.get
@@ -73,20 +74,203 @@ import ru.alexey.event.threads.resources.resource
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.scopeholder.scopeHolder
+import ru.alexey.event.threads.scopeholder.typed.ScopeKey
+import ru.alexey.event.threads.scopeholder.typed.by
+import ru.alexey.event.threads.scopeholder.typed.include
+import ru.alexey.event.threads.scopeholder.typed.of
 import ru.alexey.event.threads.widget.createWidget
 import kotlin.random.Random
+
+// Typed scope keys, replacing the old raw-String ones ("TodoDomain", "TodoListBase", "Work",
+// "Personal", "TodoTabs", "TodoDraft"). Named to match those old strings exactly (ScopeKey.identity
+// defaults to the simple class name) so nothing downstream that still compares against those
+// literals - test assertions, `Scope.key` reads in TodoListScreen below - needed to change.
+object TodoDomain : ScopeKey<Unit>
+
+// Never loaded on its own - "Work"/"Personal" `implements` it. `cacheKey` is what used to be a
+// bare `scopeParams.resolveOrDefault("todos_default")` pull from the untyped Parameters bag.
+object TodoListBase : ScopeKey<TodoListBase.Params> {
+    data class Params(val cacheKey: String = "todos_default")
+}
+
+object Work : ScopeKey<TodoListBase.Params>
+object Personal : ScopeKey<TodoListBase.Params>
+
+object TodoTabs : ScopeKey<Unit>
+
+object TodoDraft : ScopeKey<TodoDraft.Params> {
+    data class Params(val initialText: String = "")
+}
 
 // Widgets are reusable displays bound to a *fixed* named scope's existing state - drop one
 // anywhere without re-wiring LocalScope/resolveOrThrow at each call site. Since "Work" and
 // "Personal" are separate scopes (see below), each needs its own widget instance.
-val workRemainingWidget = createWidget<List<Todo>>("Work") { todos, modifier ->
+val workRemainingWidget = createWidget<List<Todo>>(Work.identity) { todos, modifier ->
     Text(text = "${todos.count { !it.done }} left", modifier = modifier, style = MaterialTheme.typography.labelLarge)
 }
-val personalRemainingWidget = createWidget<List<Todo>>("Personal") { todos, modifier ->
+val personalRemainingWidget = createWidget<List<Todo>>(Personal.identity) { todos, modifier ->
     Text(text = "${todos.count { !it.done }} left", modifier = modifier, style = MaterialTheme.typography.labelLarge)
 }
 
 private const val ADD_LIMIT = 5
+
+// A business-rule layer with no UI and no access to Work/Personal's containers - it only
+// knows about the same events the UI dispatches, keeps its own event-sourced tally, and
+// reports its verdict back as a new event.
+private val todoDomainFragment = ScopeKey.by(TodoDomain)
+private val todoDomainBody = Scope.of(TodoDomain) {
+    val totalAdded by datacontainer(flowResource(0)) {
+        coroutineScope {
+            CoroutineScope(Dispatchers.Main + SupervisorJob())
+        }
+        watcher { state ->
+            Logger.d(tag = "TodoDomainState") {
+                state.toString()
+            }
+        }
+    }
+    totalAdded.value
+
+    threads {
+        thread<AddTodo> {
+            output<AddLimitReached>()
+        }.then(totalAdded) { state, _ ->
+            state + 1
+        }.end {
+            if (totalAdded.value >= ADD_LIMIT) {
+                eventBus += AddLimitReached(totalAdded.value)
+            }
+        }
+    }
+}
+
+// "TodoListBase" is never loaded on its own - it's a template. Its threads/containers get
+// copied (by value/by closure) into every scope that `implements` it, each getting its own
+// independent copy since `implements` re-runs this factory fresh per implementer.
+private val todoListBaseFragment = ScopeKey.by(TodoListBase)
+private val todoListBaseBody = Scope.of(TodoListBase) { params ->
+    config {
+        createEventBus {
+            watcher { Logger.d(tag = "TODO") { it.toString() } }
+        }
+    }
+
+    // Scope scoped value
+    val json by resource {
+        valueResource(
+            dependencyProvider.get<Json>()
+        )
+    }
+
+    // Reads always come from the in-memory Flow side; the JSON file is only ever read once
+    // (to hydrate on first load) and then only ever written to, never re-read on every
+    // add/toggle/delete. `Json` itself comes from `dependencyProvider` (see
+    // provideTodoScopeHolder) rather than the kotlinx.serialization default directly.
+    val todos by datacontainer(
+        cacheJsonResource(
+            key = params.cacheKey,
+            initial = emptyList<Todo>(),
+            json = json()()
+        )
+    ) {}
+    val showCompleted by datacontainer(flowResource(true)) {}
+
+    // Composite state: `visibleTodos` is derived by combining two independent containers
+    // of this same scope (the raw list + the filter flag) via `.transform()`, rather than
+    // being written to directly by any thread.
+    val visibleTodos by datacontainer(flowResource(VisibleTodos(emptyList()))) {
+        transform(todos) { list, _ -> VisibleTodos(list) }
+        transform(showCompleted) { show, current ->
+            if (show) current else VisibleTodos(current.items.filterNot { it.done })
+        }
+    }
+
+    // Materializes "TodoDomain"'s verdict locally - this scope never reads TodoDomain's own
+    // container (containers are scope-local, not shared across scopes), it only reacts to
+    // the event TodoDomain sent.
+    val limitHits by datacontainer(flowResource(0)) {}
+
+    // Force these four containers to build now, while `this` is still the template's own
+    // ScopeBuilder - `implements` snapshot-copies containerBuilder entries into the child at
+    // construction time, so anything realized lazily *after* that copy would never surface
+    // on the child's own scope (and thus never be resolvable there).
+    todos.value
+    showCompleted.value
+    visibleTodos.value
+    limitHits.value
+
+    threads {
+        thread<AddTodo>().then(todos) { list, event ->
+            list + Todo(id = Random.nextLong(), text = event.text)
+        }
+        thread<ToggleTodo>().then(todos) { list, event ->
+            list.map { if (it.id == event.id) it.copy(done = !it.done) else it }
+        }
+        thread<DeleteTodo>().then(todos) { list, event ->
+            list.filterNot { it.id == event.id }
+        }
+        thread<SaveTodoText>().then(todos) { list, event ->
+            list.map { if (it.id == event.id) it.copy(text = event.text) else it }
+        }
+        thread<SetShowCompleted>().then(showCompleted) { _, event -> event.show }
+        thread<AddLimitReached>().then(limitHits) { count, _ -> count + 1 }
+        thread<LifecycleEvents>().end {
+            Logger.d(tag = "LifecycleEvents") { it.toString() }
+        }
+    }
+}
+
+// AddLimitReached is domain-to-UI only - Navigation/TodoDraft/TodoTabs have no handler for
+// it anyway, but routing it explicitly (rather than broadcasting) states that intent and
+// exercises the same targeted-delivery path the domain scope relies on to reach whichever
+// list is currently active. Declared right on each consuming scope now, instead of as a
+// separate `AddLimitReached::class consume listOf(...)` statement elsewhere.
+private val workFragment = ScopeKey.by(Work) {
+    implements(TodoListBase)
+    consume<AddLimitReached>()
+}
+
+private val personalFragment = ScopeKey.by(Personal) {
+    implements(TodoListBase)
+    consume<AddLimitReached>()
+}
+
+// Kept alive for the whole app session so the currently-selected tab survives navigation.
+// Deliberately event-driven (SelectList -> selectedList container) rather than a Compose
+// `remember` - the tab is app state, not transient UI state, so it belongs in a scope.
+// "TodoTabs" is the one thing loaded from Compose (App.kt) for the whole app session -
+// dependsOn piggybacks TodoDomain's load/free onto it, so it's always around to see AddTodo
+// regardless of which tab is mounted, without Compose needing to know TodoDomain exists.
+private val todoTabsFragment = ScopeKey.by(TodoTabs) {
+    dependsOn(TodoDomain)
+}
+private val todoTabsBody = Scope.of(TodoTabs) {
+    val selectedList by datacontainer(flowResource("Work")) {}
+
+    threads {
+        thread<SelectList>().then(selectedList) { _, event -> event.name }
+    }
+}
+
+private val todoDraftFragment = ScopeKey.by(TodoDraft)
+private val todoDraftBody = Scope.of(TodoDraft) { params ->
+    config {
+        createEventBus {
+            coroutineScope {
+                CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            }
+        }
+    }
+    val draft by datacontainer(flowResource(params.initialText)) {
+        coroutineScope {
+            CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        }
+    }
+
+    threads {
+        thread<SetDraftText>().then(draft) { _, event -> event.text }
+    }
+}
 
 fun provideTodoScopeHolder() = scopeHolder {
     // Dependency provider example: a standalone Koin instance (koinApplication, not the global
@@ -105,156 +289,14 @@ fun provideTodoScopeHolder() = scopeHolder {
     }.koin
     dependencyProvider(koin.asDependencyProvider())
 
-    // AddLimitReached is domain-to-UI only - Navigation/TodoDraft/TodoTabs have no handler for
-    // it anyway, but routing it explicitly (rather than broadcasting) states that intent and
-    // exercises the same targeted-delivery path the domain scope relies on to reach whichever
-    // list is currently active.
-    AddLimitReached::class consume listOf("Work", "Personal")
-
-    // "TodoTabs" is the one thing loaded from Compose (App.kt) for the whole app session -
-    // dependsOn piggybacks TodoDomain's load/free onto it, so it's always around to see AddTodo
-    // regardless of which tab is mounted, without Compose needing to know TodoDomain exists.
-    "TodoTabs" dependsOn "TodoDomain"
-
-    // A business-rule layer with no UI and no access to Work/Personal's containers - it only
-    // knows about the same events the UI dispatches, keeps its own event-sourced tally, and
-    // reports its verdict back as a new event.
-    scopeEmbedded("TodoDomain") {
-        val totalAdded by datacontainer(flowResource(0)) {
-            coroutineScope {
-                CoroutineScope(Dispatchers.Main + SupervisorJob())
-            }
-            watcher { state ->
-                Logger.d(tag = "TodoDomainState") {
-                    state.toString()
-                }
-            }
-        }
-        totalAdded.value
-
-        threads {
-            thread<AddTodo>{
-                output<AddLimitReached>()
-            }.then(totalAdded) { state, _ ->
-                state + 1
-            }.end {
-                if (totalAdded.value >= ADD_LIMIT) {
-                    eventBus += AddLimitReached(totalAdded.value)
-                }
-            }
-        }
-    }
-
-    // "TodoListBase" is never loaded on its own - it's a template. Its threads/containers get
-    // copied (by value/by closure) into every scope that `implements` it, each getting its own
-    // independent copy since `implements` re-runs this factory fresh per implementer.
-    scopeEmbedded("TodoListBase") { scopeParams ->
-        config {
-            createEventBus {
-                watcher { Logger.d(tag = "TODO") { it.toString() } }
-            }
-        }
-
-        // Scope scoped value
-        val json by resource {
-            valueResource(
-                dependencyProvider.get<Json>()
-            )
-        }
-
-        // Reads always come from the in-memory Flow side; the JSON file is only ever read once
-        // (to hydrate on first load) and then only ever written to, never re-read on every
-        // add/toggle/delete. `Json` itself comes from `dependencyProvider` (see
-        // provideTodoScopeHolder) rather than the kotlinx.serialization default directly.
-        val todos by datacontainer(
-            cacheJsonResource(
-                key = scopeParams.resolveOrDefault("todos_default"),
-                initial = emptyList<Todo>(),
-                json = json()()
-            )
-        ) {}
-        val showCompleted by datacontainer(flowResource(true)) {}
-
-        // Composite state: `visibleTodos` is derived by combining two independent containers
-        // of this same scope (the raw list + the filter flag) via `.transform()`, rather than
-        // being written to directly by any thread.
-        val visibleTodos by datacontainer(flowResource(VisibleTodos(emptyList()))) {
-            transform(todos) { list, _ -> VisibleTodos(list) }
-            transform(showCompleted) { show, current ->
-                if (show) current else VisibleTodos(current.items.filterNot { it.done })
-            }
-        }
-
-        // Materializes "TodoDomain"'s verdict locally - this scope never reads TodoDomain's own
-        // container (containers are scope-local, not shared across scopes), it only reacts to
-        // the event TodoDomain sent.
-        val limitHits by datacontainer(flowResource(0)) {}
-
-        // Force these four containers to build now, while `this` is still the template's own
-        // ScopeBuilder - `implements` snapshot-copies containerBuilder entries into the child at
-        // construction time, so anything realized lazily *after* that copy would never surface
-        // on the child's own scope (and thus never be resolvable there).
-        todos.value
-        showCompleted.value
-        visibleTodos.value
-        limitHits.value
-
-        threads {
-            thread<AddTodo>().then(todos) { list, event ->
-                list + Todo(id = Random.nextLong(), text = event.text)
-            }
-            thread<ToggleTodo>().then(todos) { list, event ->
-                list.map { if (it.id == event.id) it.copy(done = !it.done) else it }
-            }
-            thread<DeleteTodo>().then(todos) { list, event ->
-                list.filterNot { it.id == event.id }
-            }
-            thread<SaveTodoText>().then(todos) { list, event ->
-                list.map { if (it.id == event.id) it.copy(text = event.text) else it }
-            }
-            thread<SetShowCompleted>().then(showCompleted) { _, event -> event.show }
-            thread<AddLimitReached>().then(limitHits) { count, _ -> count + 1 }
-            thread<LifecycleEvents>().end {
-                Logger.d(tag = "LifecycleEvents") { it.toString() }
-            }
-        }
-    }
-
-    scopeEmbedded("Work") {}
-    "Work" implements "TodoListBase"
-
-    scopeEmbedded("Personal") {}
-    "Personal" implements "TodoListBase"
-
-    // Kept alive for the whole app session so the currently-selected tab survives navigation.
-    // Deliberately event-driven (SelectList -> selectedList container) rather than a Compose
-    // `remember` - the tab is app state, not transient UI state, so it belongs in a scope.
-    scopeEmbedded("TodoTabs") {
-        val selectedList by datacontainer(flowResource("Work")) {}
-
-        threads {
-            thread<SelectList>().then(selectedList) { _, event -> event.name }
-        }
-    }
-
-    scopeEmbedded("TodoDraft") { scopeParams ->
-        config {
-            createEventBus {
-                coroutineScope {
-                    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-                }
-            }
-        }
-        val draft by datacontainer(flowResource(scopeParams.resolveOrDefault(""))) {
-            coroutineScope {
-                CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-            }
-        }
-
-        threads {
-            thread<SetDraftText>().then(draft) { _, event -> event.text }
-        }
-    }
+    include(
+        todoDomainFragment, todoDomainBody,
+        todoListBaseFragment, todoListBaseBody,
+        workFragment,
+        personalFragment,
+        todoTabsFragment, todoTabsBody,
+        todoDraftFragment, todoDraftBody,
+    )
 
     navGraph<TodoDestination>("Navigation", TodoListDestination) {
         TodoListDestination::class bind {
@@ -288,7 +330,8 @@ fun TodoTabsScreen() {
         // `scope()` keys its own remember/dispose on `name`, so switching selectedList here
         // correctly tears down the old list's scope and resolves the new one against its own
         // parameters - no manual `key()` wrapping needed at the call site.
-        scope(selectedList, parameters = mapOf(String::class to { "todos_${selectedList.lowercase()}" })) {
+        val target = if (selectedList == "Work") Work else Personal
+        scope(target, TodoListBase.Params(cacheKey = "todos_${selectedList.lowercase()}")) {
             NavGraph("Navigation")
         }
     }
@@ -334,7 +377,7 @@ private fun TodoListScreen() {
             )
         },
         bottomBar = {
-            scope("TodoDraft") {
+            scope(TodoDraft, TodoDraft.Params()) {
                 val draft by LocalScope.current.resolveOrThrow<String>().collectAsState()
                 Surface(tonalElevation = 3.dp) {
                     Row(
@@ -413,7 +456,7 @@ private fun TodoListScreen() {
 private fun EditTodoScreen(params: EditTodoParams) {
     val holder = LocalScopeHolder.current
 
-    scope("TodoDraft", parameters = mapOf(String::class to { params.text })) {
+    scope(TodoDraft, TodoDraft.Params(initialText = params.text)) {
         val draft by LocalScope.current.resolveOrThrow<String>().collectAsState()
 
         Scaffold(

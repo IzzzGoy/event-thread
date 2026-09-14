@@ -61,7 +61,7 @@ class ScopeBuilder(
         override val eventBus: EventBus = config.eventBus
         override val description: String = config.description
         override val dependencyProvider: DependencyProvider = this@ScopeBuilder.dependencyProvider
-        override fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>? = containerBuilder[clazz]
+        override fun <T : Any> get(clazz: KClass<T>, name: String?): Datacontainer<T>? = containerBuilder.get(clazz, name)
 
         init {
             applied.forEach { it() }
@@ -190,21 +190,31 @@ abstract class Scope : KeyHolder, AutoCloseable {
         eventBus.close()
     }
 
-    /** Looks up the [Datacontainer] registered for [clazz] on this scope, or `null` if none is. */
-    abstract operator fun <T : Any> get(clazz: KClass<T>): Datacontainer<T>?
+    /**
+     * Looks up the [Datacontainer] registered for [clazz] on this scope, or `null` if none is.
+     *
+     * [name] distinguishes it from another [clazz]-typed container in the same scope
+     * (multi-binding, see [ru.alexey.event.threads.datacontainer.ContainerBuilder]). `null` (the
+     * default) resolves by [clazz] alone - the same behavior every scope had before multi-binding
+     * existed, since a scope built without ever naming its containers has at most one per type.
+     * Throws if more than one [clazz]-typed container is registered and [name] is `null` (can't
+     * tell which one is meant).
+     */
+    abstract operator fun <T : Any> get(clazz: KClass<T>, name: String? = null): Datacontainer<T>?
 
-    /** [get] by reified type - `null` if [T] has no container registered on this scope. */
-    inline fun <reified T : Any> resolve(): Datacontainer<T>? = get(T::class)
+    /** [get] by reified type - `null` if no matching container is registered on this scope. See
+     * [get] for what [name] does. */
+    inline fun <reified T : Any> resolve(name: String? = null): Datacontainer<T>? = get(T::class, name)
 
-    /** [resolve], throwing if [T] has no container registered on this scope - use when the
+    /** [resolve], throwing if no matching container is registered on this scope - use when the
      * container's presence is a build-time invariant of this scope, not something to branch on. */
-    inline fun <reified T : Any> resolveOrThrow(): Datacontainer<T> =
-        get(T::class) ?: throw Exception("Container not registered")
+    inline fun <reified T : Any> resolveOrThrow(name: String? = null): Datacontainer<T> =
+        get(T::class, name) ?: throw Exception("Container not registered")
 
     /** [get] via a [DatacontainerKey] instead of a raw [KClass] - throws if unregistered, same as
      * [resolveOrThrow]. */
     operator fun <T : Any> get(datacontainerKey: DatacontainerKey<T>): Datacontainer<T> {
-        return this[datacontainerKey.keyKClass] ?: throw Exception("Container not registered")
+        return this[datacontainerKey.keyKClass, datacontainerKey.name] ?: throw Exception("Container not registered")
     }
 
     /** Property-delegate form of [resolveOrThrow] - `val todos: Datacontainer<List<Todo>> by
@@ -301,6 +311,9 @@ abstract class Scope : KeyHolder, AutoCloseable {
         }
     }
 
+    /** Anchor for factory functions building a [Scope]'s content elsewhere - see e.g.
+     * [ru.alexey.event.threads.scopeholder.typed.of]. */
+    companion object
 }
 
 /** [scopeBuilder] taking a [KeyHolder] instead of a raw name - the resulting factory's name comes

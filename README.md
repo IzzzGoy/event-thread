@@ -200,9 +200,25 @@ fun TodosScreen() {
 }
 ```
 
-Container lookup is by *type*, not by name - a scope can only hold one resolvable container per
-distinct type. If two containers in the same scope would erase to the same type (e.g. two
-`List<Todo>`), wrap one in a small dedicated data class so they stay independently resolvable.
+Container lookup is by *type and name* - `name` defaults to the declaring property's own name
+(`val todos by datacontainer(...) { }` registers under `"todos"`), so two differently-named
+same-typed containers in one scope (e.g. two `List<Todo>`s) are independently resolvable with no
+extra wrapping needed:
+
+```kotlin
+val workTodos by datacontainer(flowResource(emptyList<Todo>())) { }
+val personalTodos by datacontainer(flowResource(emptyList<Todo>())) { }
+```
+
+```kotlin
+val work by LocalScope.current.resolveOrThrow<List<Todo>>("workTodos").collectAsState()
+val personal by LocalScope.current.resolveOrThrow<List<Todo>>("personalTodos").collectAsState()
+```
+
+Calling `resolveOrThrow<T>()`/`resolve<T>()` with no name resolves by type alone, succeeding only
+when exactly one `T`-typed container exists in the scope (throws, naming the ambiguous
+candidates, if there's more than one) - the same behavior every scope had before named containers
+existed, so existing code that never names its containers is unaffected.
 
 ### 4. Composite (derived) state
 

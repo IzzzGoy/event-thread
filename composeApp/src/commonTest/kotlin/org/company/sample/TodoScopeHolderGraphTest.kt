@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import ru.alexey.event.threads.scopeholder.ScopeHolder
 import ru.alexey.event.threads.scopeholder.generateActiveSchema
+import ru.alexey.event.threads.scopeholder.typed.typedParameters
 import ru.alexey.event.threads.test.graph.assertNoCycles
 import ru.alexey.event.threads.test.graph.invoke
 import ru.alexey.event.threads.test.graph.toEventGraph
@@ -43,7 +44,17 @@ class TodoScopeHolderGraphTest {
 
     private fun loadedHolder(vararg keys: String): ScopeHolder {
         val holder = provideTodoScopeHolder()
-        keys.forEach { holder.findOrLoad(it) }
+        keys.forEach { key ->
+            // TodoDraft now declares a typed `TodoDraft.Params` instead of an untyped-Parameters
+            // `resolveOrDefault("")` - a raw-string findOrLoad with none no longer has an implicit
+            // default to fall back on, so it must be supplied explicitly here, same as any real
+            // caller (see EditTodoScreen/TodoListScreen's bottom bar in TodoApp.kt).
+            if (key == "TodoDraft") {
+                holder.findOrLoad(key) { typedParameters(TodoDraft.Params()) }
+            } else {
+                holder.findOrLoad(key)
+            }
+        }
         return holder
     }
 

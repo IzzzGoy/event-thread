@@ -40,7 +40,7 @@ abstract class RealDataContainer<T>(
 // `viewModelScope`, say - would take it down entirely the moment this one container is closed.
 @OptIn(ExperimentalStdlibApi::class)
 inline fun<reified T: Any> ContainerBuilder.realDataContainer(
-    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: suspend (suspend (T) -> T) -> Unit
+    flow: StateFlow<T>, scope: CoroutineScope, name: String, crossinline innerUpdate: suspend (suspend (T) -> T) -> Unit
 ): RealDataContainer<T> = object : AutoCloseable, RealDataContainer<T>(
     flow
 ) {
@@ -50,7 +50,7 @@ inline fun<reified T: Any> ContainerBuilder.realDataContainer(
     }
 
     init {
-        this@realDataContainer[T::class] = this as Datacontainer<T>
+        this@realDataContainer.set(T::class, name, this as Datacontainer<T>)
         launchIn(scope)
     }
 
