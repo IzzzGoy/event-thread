@@ -8,7 +8,8 @@ plugins {
     id("com.vanniktech.maven.publish") version "0.30.0" apply false
 }
 
-version = "1.0.0"
+// CI passes -PreleaseVersion=<tag without "v">; local builds keep the default.
+version = providers.gradleProperty("releaseVersion").getOrElse("1.0.0")
 group = "io.github.izzzgoy"
 
 repositories {

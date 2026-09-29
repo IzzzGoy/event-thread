@@ -1,0 +1,98 @@
+name: Publish to Maven Central
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 2.0.0-RC3). Empty = value from build.gradle.kts"
+        required: false
+        type: string
+      release:
+        description: "Auto-release on Central Portal (otherwise the deployment stays in 'Validated' and must be released manually)"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # iOS targets (iosArm64 / iosSimulatorArm64) can only be built on macOS.
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: konan-${{ runner.os }}-
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION:-<build.gradle.kts default>}"
+
+      - name: Configure credentials
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          # The keyring file from gradle.properties only exists locally, so CI signs with an
+          # in-memory ASCII-armored key (vanniktech prefers it over signing.secretKeyRingFile).
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::SIGNING_KEY secret is not set"
+            exit 1
+          fi
+          {
+            echo "ORG_GRADLE_PROJECT_signingInMemoryKey<<__EOF__"
+            echo "$SIGNING_KEY"
+            echo "__EOF__"
+            [ -n "$SIGNING_KEY_ID" ] && echo "ORG_GRADLE_PROJECT_signingInMemoryKeyId=$SIGNING_KEY_ID"
+            [ -n "$SIGNING_KEY_PASSWORD" ] && echo "ORG_GRADLE_PROJECT_signingInMemoryKeyPassword=$SIGNING_KEY_PASSWORD"
+            # Maven Central credentials fall back to gradle.properties when the secrets are absent.
+            [ -n "$MAVEN_CENTRAL_USERNAME" ] && echo "ORG_GRADLE_PROJECT_mavenCentralUsername=$MAVEN_CENTRAL_USERNAME"
+            [ -n "$MAVEN_CENTRAL_PASSWORD" ] && echo "ORG_GRADLE_PROJECT_mavenCentralPassword=$MAVEN_CENTRAL_PASSWORD"
+            true
+          } >> "$GITHUB_ENV"
+
+      - name: Run JVM tests
+        run: ./gradlew jvmTest
+
+      - name: Publish
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          AUTO_RELEASE: ${{ github.event_name == 'push' || inputs.release }}
+        run: |
+          TASK=publishToMavenCentral
+          [ "$AUTO_RELEASE" = "true" ] && TASK=publishAndReleaseToMavenCentral
+          ARGS=()
+          [ -n "$RELEASE_VERSION" ] && ARGS+=("-PreleaseVersion=$RELEASE_VERSION")
+          # vanniktech's Central Portal upload doesn't support the configuration cache.
+          ./gradlew "$TASK" "${ARGS[@]}" --no-configuration-cache
