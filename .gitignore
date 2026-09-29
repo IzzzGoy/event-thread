@@ -8,3 +8,4 @@ build
 kotlin-js-store
 local.properties
 .publish.sh
+.kotlin

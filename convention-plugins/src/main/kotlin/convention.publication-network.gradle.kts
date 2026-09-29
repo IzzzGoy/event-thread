@@ -1,80 +1,50 @@
-import java.util.*
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.SonatypeHost
 
 plugins {
-    `maven-publish`
-    signing
-}
-val secretPropsFile = project.rootProject.file("local.properties")
-if (secretPropsFile.exists()) {
-    secretPropsFile.reader().use {
-        Properties().apply {
-            load(it)
-        }
-    }.onEach { (name, value) ->
-        ext[name.toString()] = value
-    }
-} else {
-    ext["signing.keyId"] = System.getenv("SIGNING_KEY_ID")
-    ext["signing.password"] = System.getenv("SIGNING_PASSWORD")
-    ext["signing.secretKeyRingFile"] = System.getenv("SIGNING_SECRET_KEY_RING_FILE")
-    ext["ossrhUsername"] = System.getenv("OSSRH_USERNAME")
-    ext["ossrhPassword"] = System.getenv("OSSRH_PASSWORD")
+    id("com.vanniktech.maven.publish")
 }
 
-val javadocJar by tasks.registering(Jar::class) {
-    archiveClassifier.set("javadoc")
-}
+mavenPublishing {
+    configure(
+        KotlinMultiplatform(
+            javadocJar = JavadocJar.Empty(),
+            sourcesJar = true,
+            androidVariantsToPublish = listOf("release"),
+        )
+    )
 
-fun getExtraString(name: String) = ext[name]?.toString()
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
 
-publishing {
-    repositories {
-        maven {
-            name = "sonatype"
-            setUrl("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-            credentials {
-                username = getExtraString("ossrhUsername")
-                password = getExtraString("ossrhPassword")
+    signAllPublications()
+
+    coordinates(
+        rootProject.group.toString(),
+        project.name,
+        rootProject.version.toString()
+    )
+
+    pom {
+        name.set("Event Thread Network")
+        description.set("Network subsystem for Event Thread")
+        url.set("https://github.com/IzzzGoy/event-thread")
+
+        licenses {
+            license {
+                name.set("MIT")
+                url.set("https://opensource.org/licenses/MIT")
             }
         }
-    }
-    publications {
-        withType<MavenPublication> {
-            groupId = rootProject.group.toString()
-            artifactId = project.name
-            version = rootProject.version.toString()
-
-            // Stub javadoc.jar artifact
-            artifact(javadocJar.get())
-
-            // Provide artifacts information requited by Maven Central
-            pom {
-                name.set("Event Thread Network")
-                description.set("Network subsystem for Event Thread")
-                url.set("https://github.com/IzzzGoy/event-thread")
-
-                licenses {
-                    license {
-                        name.set("MIT")
-                        url.set("https://opensource.org/licenses/MIT")
-                    }
-                }
-                developers {
-                    developer {
-                        id.set("FromGoy")
-                        name.set("Alexey")
-                        email.set("xzadmoror@gmail.com")
-                    }
-                }
-                scm {
-                    url.set("https://github.com/IzzzGoy/event-thread")
-                }
+        developers {
+            developer {
+                id.set("FromGoy")
+                name.set("Alexey")
+                email.set("xzadmoror@gmail.com")
             }
+        }
+        scm {
+            url.set("https://github.com/IzzzGoy/event-thread")
         }
     }
 }
-
-signing {
-    sign(publishing.publications)
-}
-
