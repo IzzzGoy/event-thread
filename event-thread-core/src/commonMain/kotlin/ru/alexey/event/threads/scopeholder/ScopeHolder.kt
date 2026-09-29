@@ -3,24 +3,34 @@ package ru.alexey.event.threads.scopeholder
 import ru.alexey.event.threads.Event
 import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.ScopeBuilder
-import ru.alexey.event.threads.scopeBuilder
+import ru.alexey.event.threads.resources.Parameters
 import kotlin.reflect.KClass
+import kotlin.reflect.typeOf
 
 class ScopeHolder(
-    private val external: Map<KClass<out Event>, List<String>>,
-    private val factories: Map<String, () -> Scope>,
-    private val dependencies: Map<String, List<String>> = emptyMap(),
+    val external: Map<KClass<out Event>, List<String>>,
+    private val factories: Map<String, (Parameters, List<ScopeBuilder>) -> ScopeBuilder>,
+    val dependencies: Map<String, List<String>> = emptyMap(),
+    private val implementations: Map<String, List<String>> = emptyMap()
 ) {
 
     private val active: MutableSet<Scope> = mutableSetOf()
 
     val activeMetadata
-        get() =  active.map { it.key to it.eventBus.metadata }.toMap()
-    val allMetadata
-        get() = factories.map { it.key to it.value().eventBus.metadata }.toMap()
-    private fun loadInternal(key: String): Scope? {
+        get() = active.associate { it.key to it.metadata }
+
+    private fun getAllDeps(key: String, params: () -> Parameters): List<ScopeBuilder> {
+        return implementations.getOrElse(key, ::emptyList).mapNotNull {
+            factories[it]?.invoke(params(), getAllDeps(it, params))
+        }
+    }
+
+    private fun loadInternal(key: String, params: () -> Parameters = ::emptyMap): Scope? {
         return factories[key]?.let {
-            it()
+            val scope = it(params(), getAllDeps(key, params))
+
+            //it(params()).scope
+            scope.scope
         }?.also { scope ->
             active += scope
             external.forEach { (k, receivers) ->
@@ -45,8 +55,12 @@ class ScopeHolder(
         return loadInternal(key)
     }
 
+    fun load(key: String, params: () -> Parameters): Scope? {
+        return loadInternal(key, params)
+    }
+
     infix fun free(keyHolder: KeyHolder) {
-       free(keyHolder.key)
+        free(keyHolder.key)
     }
 
     infix fun free(key: String) {
@@ -86,7 +100,11 @@ class ScopeHolder(
     }
 
     infix fun find(key: String): Scope? = active.find { it.key == key }
-    infix fun findOrLoad(key: String): Scope = find(key) ?: load(key) ?: error("Scope with name: $key not found")
+    infix fun findOrLoad(key: String): Scope =
+        find(key) ?: load(key) ?: error("Scope with name: $key not found")
+
+    fun findOrLoad(key: String, params: () -> Parameters): Scope =
+        find(key) ?: load(key, params) ?: error("Scope with name: $key not found")
 }
 
 

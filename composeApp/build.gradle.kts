@@ -1,9 +1,8 @@
 plugins {
-    kotlin("multiplatform")
-    id("org.jetbrains.compose")
-    id("com.android.application")
-    id("io.github.skeptick.libres")
-    id("org.jetbrains.kotlin.plugin.serialization")
+    alias(libs.plugins.multiplatform)
+    alias(libs.plugins.compose)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.serialization)
 }
 
 kotlin {

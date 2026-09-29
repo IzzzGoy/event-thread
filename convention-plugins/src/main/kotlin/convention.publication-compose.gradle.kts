@@ -48,7 +48,6 @@ publishing {
             groupId = rootProject.group.toString()
             artifactId = project.name
             version = rootProject.version.toString()
-            println("$groupId:$artifactId:$version")
 
             // Stub javadoc.jar artifact
             artifact(javadocJar.get())

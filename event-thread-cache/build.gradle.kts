@@ -1,7 +1,6 @@
 plugins {
-    // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    kotlin("multiplatform")
-    id("com.android.library")
+    alias(libs.plugins.multiplatform)
+    alias(libs.plugins.android.library)
     id("convention.publication-cache")
 }
 

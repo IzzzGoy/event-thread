@@ -1,11 +1,13 @@
 package ru.alexey.event.threads.datacontainer
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import ru.alexey.event.threads.resources.ObservableResource
+import kotlin.properties.ReadOnlyProperty
 
 
 interface Datacontainer<T> : StateFlow<T> {
@@ -17,13 +19,14 @@ abstract class RealDataContainer<T>(
 ) : StateFlow<T> by stateFlow, Datacontainer<T>
 
 
+@OptIn(ExperimentalStdlibApi::class)
 inline fun<reified T: Any> ContainerBuilder.realDataContainer(
-    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: suspend ((T) -> T) -> Unit
-) = object : RealDataContainer<T>(
+    flow: StateFlow<T>, scope: CoroutineScope , crossinline innerUpdate: ((T) -> T) -> Unit
+): RealDataContainer<T> = object : AutoCloseable, RealDataContainer<T>(
     flow
 ) {
 
-    override suspend fun update(block: (T) -> T) {
+    override suspend fun update(block:  (T) -> T) {
         innerUpdate(block)
     }
 
@@ -31,6 +34,12 @@ inline fun<reified T: Any> ContainerBuilder.realDataContainer(
         this@realDataContainer[T::class] = this as Datacontainer<T>
         launchIn(scope)
     }
+
+    override fun close() {
+        scope.cancel()
+    }
 }
+
+
 
 

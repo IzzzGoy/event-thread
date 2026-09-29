@@ -1,14 +1,18 @@
 package ru.alexey.event.threads.navgraph
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import ru.alexey.event.threads.ListBuilder
+import kotlinx.coroutines.flow.StateFlow
+import ru.alexey.event.threads.LocalScope
+import ru.alexey.event.threads.datacontainer.Datacontainer
+import ru.alexey.event.threads.utils.ListBuilder
 import ru.alexey.event.threads.resources.Parameters
-import ru.alexey.event.threads.resources.resolve
 import ru.alexey.event.threads.scope
 import ru.alexey.event.threads.widget.Widget
-import ru.alexey.event.threads.widget.createWidget
 import ru.alexey.event.threads.widget.widget
+import kotlin.properties.ReadOnlyProperty
 import kotlin.random.Random
 import kotlin.reflect.KClass
 
@@ -26,10 +30,14 @@ class ScreenBuilder {
         widgets[name] = widget
     }
 
-    inline fun registerWidget(name: String, crossinline content: @Composable (modifier: Modifier) -> Unit) {
+    inline fun registerWidget(
+        name: String,
+        crossinline content: @Composable (modifier: Modifier) -> Unit
+    ) {
         registerWidget(name, block = {
             object : Widget {
                 override val name: String = name
+
                 @Composable
                 override fun Content(modifier: Modifier) {
                     scope(name) {
@@ -40,10 +48,14 @@ class ScreenBuilder {
         })
     }
 
-    inline fun<reified T : Any> registerWidget(name: String, crossinline content: @Composable (T, Modifier) -> Unit) {
+    inline fun <reified T : Any> registerWidget(
+        name: String,
+        crossinline content: @Composable (T, Modifier) -> Unit
+    ) {
         registerWidget(name, block = {
             object : Widget {
                 override val name: String = name
+
                 @Composable
                 override fun Content(modifier: Modifier) {
                     scope(name) {
@@ -92,8 +104,6 @@ class ScreenBuilder {
 }
 
 
-
-
 class Screen(
     private val required: List<KClass<out Any>>,
     private val widgets: Map<String, Widget>,
@@ -110,15 +120,37 @@ class Screen(
             require(it in this.required) { "Incorrect param type! Expect: ${it.simpleName}" }
         }
     }
-    @Composable operator fun invoke(parameters: () -> Parameters) {
+
+    @Composable
+    operator fun invoke(parameters: () -> Parameters) {
         with(parameters()) {
             content(widgets)
         }
     }
 
-    @Composable infix fun renderWith(parameters: () -> Parameters) {
+    @Composable
+    infix fun renderWith(parameters: () -> Parameters) {
         with(parameters()) {
             content(widgets)
+        }
+    }
+}
+
+inline fun <reified T : Any> widget(
+    name: String? = null,
+    crossinline content: @Composable (T, Modifier) -> Unit
+): ReadOnlyProperty<Any?, Widget> {
+    return ReadOnlyProperty { thiRef: Any?, property ->
+        object : Widget {
+            override val name: String = name ?: property.name
+            @Composable
+            override fun Content(modifier: Modifier) {
+                scope(name ?: property.name) {
+                    val dc: StateFlow<T> by LocalScope.current
+                    val state by dc.collectAsState()
+                    content(state, modifier)
+                }
+            }
         }
     }
 }

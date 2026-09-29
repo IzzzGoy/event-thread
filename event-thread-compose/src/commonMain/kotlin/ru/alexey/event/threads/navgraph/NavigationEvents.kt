@@ -10,7 +10,6 @@ open class PopToScreen(val screen: Screen?): StrictEvent
 object PopUp : PopToScreen(null)
 
 interface NavigationDestination : ExtendableEvent {
-    val name: String
     val params: Parameters
         get() = mapOf()
 }

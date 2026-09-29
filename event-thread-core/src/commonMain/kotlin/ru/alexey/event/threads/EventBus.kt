@@ -1,3 +1,5 @@
+@file:Suppress("UNCHECKED_CAST")
+
 package ru.alexey.event.threads
 
 import kotlinx.coroutines.*
@@ -16,11 +18,11 @@ class EventBus(
     private val watchers: List<suspend (Event) -> Unit>
 ): AutoCloseable {
 
-    private val channel: Channel<Event> = Channel()
+    private val channel: Channel<Event> = Channel(Channel.BUFFERED)
     private val subscribers: MutableMap<KClass<out Event>, EventThread<out Event>> = mutableMapOf()
 
     val metadata
-        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventTypes }.toMap()
+        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventMetadatas }.toMap()
 
     fun unsubscribe(clazz: KClass<out Event>) {
         subscribers.remove(clazz)
@@ -53,15 +55,19 @@ class EventBus(
                         is ExtendableEvent -> {
                             for ((key, value) in subscribers.entries) {
                                 if (key.isInstance(event)) {
-                                    value.actions.forEach { it(event) }
+                                    value.actions.forEach {
+                                        it(event)
+                                    }
                                 }
                             }
                         }
 
                         else -> {
-                            subscribers[event::class]?.actions?.forEach {
-                                launch {
-                                    it(event)
+                            for ((key, value) in subscribers.entries) {
+                                if (key.isInstance(event)) {
+                                    value.actions.forEach {
+                                        it(event)
+                                    }
                                 }
                             }
                         }
@@ -82,25 +88,34 @@ class EventBus(
     }
 
     operator fun<T> invoke(clazz: KClass<T>, action: () -> EventThread<T>) where T: Event {
-        subscribers[clazz] = action()
+        val thread = action()
+        if (thread.eventMetadatas.metadata.override || subscribers[clazz] == null) {
+            subscribers[clazz] = thread
+        } else {
+            subscribers[clazz]?.plus(thread.actions)
+        }
     }
 
     inline operator fun<reified T> invoke(noinline action: () -> EventThread<T>) where T: Any, T: Event {
         invoke(T::class, action)
     }
 
-    fun<T: Event> external(clazz: KClass<T>, action: suspend (Event) -> Unit) {
-        subscribers.getOrPut(clazz) {
-            object : EventThread<T>() {
-                override fun close() {
-                    unsubscribe(clazz)
-                }
-
-                init {
-                    this@EventBus.invoke(clazz) { this }
-                }
+    fun<T: Event> external(clazz: KClass<T>, block: suspend (T) -> Unit) {
+        val eventThread = subscribers.getOrPut(clazz) {
+            EventThreadMetadataBuilder<T>(
+                description = "This thread was created by define external event thread",
+                privacy = Privacy.public
+            ).build().also {
+                this.invoke(clazz) { it }
             }
-        }.invoke(EventType.external, action)
+        }
+
+        (eventThread as EventThread<T>).invoke(
+            EventThreadAction(
+                action = block,
+                type = EventType.external
+            )
+        )
     }
 
     fun collectToEventBus(events: Flow<Event>) {
@@ -109,10 +124,11 @@ class EventBus(
         }
     }
 
-    inline fun<reified T: Event> external(noinline action: suspend (Event) -> Unit) = external(T::class, action)
+    inline fun<reified T: Event> external(
+        noinline action: suspend (T) -> Unit
+    ) = external(T::class, action)
 
     override fun close() {
-        subscribers.values.forEach(EventThread<*>::close)
         coroutineScope.cancel()
     }
 

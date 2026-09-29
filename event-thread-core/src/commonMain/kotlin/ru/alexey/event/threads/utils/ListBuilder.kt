@@ -1,4 +1,4 @@
-package ru.alexey.event.threads
+package ru.alexey.event.threads.utils
 
 class ListBuilder<T> {
     private val list = mutableListOf<T>()

@@ -12,13 +12,16 @@ import ru.alexey.event.threads.foldAndStateWithProxy
 import ru.alexey.event.threads.foldAndStateWithProxyAndWatchers
 import ru.alexey.event.threads.resources.ObservableResource
 import ru.alexey.event.threads.resources.flowResource
+import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 
 
 class ContainerBuilder {
     private val containers: MutableMap<KClass<out Any>, Datacontainer<out Any>>
             = mutableMapOf()
-    val mutex = Mutex(true)
+
+    val containersEntries: Map<KClass<out Any>, Datacontainer<out Any>>
+        get() = containers
 
     operator fun<T: Any> set(kClass: KClass<T>, container: Datacontainer<T>) {
         containers[kClass] = container
@@ -26,71 +29,42 @@ class ContainerBuilder {
     operator fun<T: Any> get(kClass: KClass<T>): Datacontainer<T>?
         = containers[kClass] as? Datacontainer<T>
 
-    @Builder
-    inline fun <reified T : Any> container(initial: T) {
-        val innerFlow = MutableStateFlow(initial)
-
-        this[T::class] = object : RealDataContainer<T>(innerFlow) {
-            override suspend fun update(block: (T) -> T) {
-                innerFlow.update(block)
-            }
-        } as Datacontainer<T>
-    }
-
-    @Builder
-    inline fun <reified T : Any> container(initial: T, block: DatacontainerBuilder<T>.() -> Unit) {
-
-        val proxy: ObservableResource<T> = flowResource(initial)
-        var transforms: List<Transform<out Any, T>>
-        var scope: CoroutineScope
-        var watchers: List<(T) -> Unit>
-
-        DatacontainerBuilder(T::class).apply(block).build().also {
-            transforms = it.transforms
-            scope = it.coroutineScope
-            watchers = it.watchers
-        }
-
-        realDataContainer(
-            flow = transforms.foldAndStateWithProxyAndWatchers(proxy, watchers, scope),
-            scope = scope
-        ) {
-            scope.launch {
-                proxy.update(it)
-            }
-        }
-    }
-
-    @Builder
-    inline fun <reified T : Any> container(block: DatacontainerBuilder<T>.() -> Unit) {
-
-        var proxy: ObservableResource<T>
-        var transforms: List<Transform<out Any, T>>
-        var scope: CoroutineScope
-        var watchers = listOf<(T) -> Unit>()
-
-        //(resource(T::class) as? ObservableResource<T>)?.also { proxy = it }
-
-        DatacontainerBuilder(T::class).apply { block() }.build().also {
-            proxy = it.proxy ?: error("Set observable resource of type <${T::class.simpleName}> or initial value")
-            transforms = it.transforms
-            scope = it.coroutineScope
-            watchers = it.watchers
-        }
-
-        realDataContainer(transforms.foldAndStateWithProxyAndWatchers(proxy, watchers, scope), scope) { it: (T) -> T ->
-            scope.launch {
-                proxy.update(it)
-            }
-        }
+    fun apply(entries: Map<KClass<out Any>, Datacontainer<out Any>>) {
+        containers.putAll(entries)
     }
 }
 
 
+inline fun<reified T: Any> ScopeBuilder.datacontainer(
+    source: ObservableResource<T>,
+    crossinline block: DatacontainerBuilder<T>.() -> Unit
+) = ReadOnlyProperty<ScopeBuilder?, Datacontainer<T>> { thisRef, property ->
+    val container = containerBuilder[T::class]
+    if (container == null) {
+        var transforms: List<Transform<out Any, T>>
+        var scope: CoroutineScope
+        var watchers: List<(T) -> Unit>
 
+        DatacontainerBuilder(T::class).apply { block() }.build().also {
+            transforms = it.transforms
+            scope = it.coroutineScope
+            watchers = it.watchers
+        }
+        with(containerBuilder) {
+            realDataContainer(transforms.foldAndStateWithProxyAndWatchers(source, watchers, scope), scope) { it: (T) -> T ->
+                scope.launch {
+                    source.update(it)
+                }
+            }
+        }
+    }  else {
+        container
+    }
+}
 
-
-
+inline fun<reified T: Any> ScopeBuilder.parent() = ReadOnlyProperty<ScopeBuilder?, Datacontainer<T>>  { thisRef, property ->
+    containerBuilder[T::class] ?: throw Exception("Container with type ${T::class.simpleName} can`t be inherited")
+}
 
 data class Transform<Other : Any, T : Any>(
     val other: () -> Flow<Other>,
@@ -132,13 +106,12 @@ class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
         watchers.add(watcher)
     }
 
-
+    @Deprecated("Replaced by new dc definition syntax", ReplaceWith("transform(otherDC, block)"))
     fun <Other : Any>ContainerBuilder.transform(clazz: KClass<Other>, block: suspend (Other, T) -> T) {
         val cb = this
         val t = Transform(
             other = {
                 flow {
-                    mutex.withLock {}
                     cb[clazz]?.let {
                         emitAll(it)
                     }
@@ -149,26 +122,24 @@ class DatacontainerBuilder<T : Any>(private val clazz: KClass<T>) {
         transforms.add(t)
     }
 
+    @Deprecated("Replaced by new dc definition syntax", ReplaceWith("transform(otherDC, block)"))
     @Builder
     inline fun <reified Other : Any> ContainerBuilder.transform(noinline block: suspend (Other, T) -> T) {
         transform(Other::class, block)
     }
 
+    @Builder
+    fun <Other : Any> transform(otherContainer: Datacontainer<Other>, block: suspend (Other, T) -> T) {
+        val t = Transform(
+            other = {
+                otherContainer
+            },
+            action = block
+        )
+        transforms.add(t)
+    }
+
     fun coroutineScope(block: () -> CoroutineScope) {
         coroutineScope = block()
-    }
-
-    fun <R : Any> ScopeBuilder.resourceLoad(clazz: KClass<R>) {
-        proxy = resource(clazz) as? ObservableResource<T> ?: error("This resource is not Observable<${clazz.simpleName}>")
-    }
-
-    @Builder
-    inline fun <reified R : Any> ScopeBuilder.resource() {
-        resourceLoad(R::class)
-    }
-
-    @Builder
-    fun ScopeBuilder.bindToResource() {
-        proxy = resource(clazz) as? ObservableResource<T> ?: error("This resource is not Observable<${clazz.simpleName}>")
     }
 }

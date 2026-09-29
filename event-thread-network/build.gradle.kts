@@ -1,7 +1,6 @@
 plugins {
-    // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    kotlin("multiplatform")
-    id("com.android.library")
+    alias(libs.plugins.multiplatform)
+    alias(libs.plugins.android.library)
     id("convention.publication-network")
     checkstyle
 }
@@ -47,12 +46,13 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                val ktorVersion = "2.3.10"
                 implementation(project(":event-thread-core"))
-                implementation("io.ktor:ktor-client-core:3.0.0-beta-1")
-                implementation("io.ktor:ktor-client-resources:3.0.0-beta-1")
-                implementation("io.ktor:ktor-client-content-negotiation:3.0.0-beta-1")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0-beta-1")
-                implementation("io.ktor:ktor-client-websockets:3.0.0-beta-1")
+                implementation("io.ktor:ktor-client-core:$ktorVersion")
+                implementation("io.ktor:ktor-client-resources:$ktorVersion")
+                implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+                implementation("io.ktor:ktor-client-websockets:$ktorVersion")
             }
         }
         commonTest {

@@ -1,10 +1,12 @@
 package ru.alexey.event.threads.widget
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import ru.alexey.event.threads.LocalScope
+import ru.alexey.event.threads.LocalStateSaver
 import ru.alexey.event.threads.scope
 import kotlin.reflect.KClass
 
@@ -13,6 +15,9 @@ interface Widget {
 
     @Composable
     fun Content(modifier: Modifier)
+
+    @Composable
+    operator fun invoke(modifier: Modifier) = Content(modifier)
 }
 
 inline fun <reified T : Any> createWidget(name: String, crossinline block: @Composable (T, Modifier) -> Unit) = object : Widget {
@@ -31,10 +36,21 @@ inline fun <reified T : Any> createWidget(name: String, crossinline block: @Comp
 @Composable
 fun <T : Any> widget(
     clazz: KClass<T>,
+    isSavable: Boolean = false,
     content: @Composable (T) -> Unit
 ) {
+
     val state by LocalScope.current[clazz]?.collectAsState()
         ?: error("Container with name: ${clazz.simpleName} was missing.")
+
+    if (isSavable) {
+        val saver = LocalStateSaver.current
+        DisposableEffect(Unit) {
+            onDispose {
+                saver.save(clazz, state)
+            }
+        }
+    }
 
     content(state)
 }

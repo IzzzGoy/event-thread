@@ -1,17 +1,11 @@
 plugins {
-    // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    kotlin("multiplatform")
-    id("com.android.library")
+    alias(libs.plugins.multiplatform)
     id("convention.publication-core")
+    alias(libs.plugins.android.library)
     checkstyle
+    alias(libs.plugins.serialization)
 }
 
-
-repositories {
-    // Use Maven Central for resolving dependencies.
-    mavenCentral()
-    google()
-}
 
 version = project.rootProject.version
 group = project.rootProject.group
@@ -45,10 +39,11 @@ kotlin {
     }
 
     sourceSets {
-        val commonMain by getting {
-
+        commonMain {
             dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+                api(libs.kotlinx.coroutines.core)
+                implementation(libs.kotlinx.serialization.json)
+                implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.22")
             }
         }
         val commonTest by getting {
