@@ -38,9 +38,9 @@ class ScopeGenerator(private val packageName: String) {
      * One container or handler the scope needs - a member of its bindings interface. [deps]: the
      * `Deps` it's built from, if any; [build]: the `Deps(...)` construction for `wire()`.
      */
-    private class Member(val name: String, val returns: ClassName, val deps: ClassName?, val build: CodeBlock?, val handles: ClassName?)
+    internal class Member(val name: String, val returns: ClassName, val deps: ClassName?, val build: CodeBlock?, val handles: ClassName?)
 
-    private fun membersOf(context: GeneratorContext, scope: ScopeModel): List<Member> {
+    internal fun membersOf(context: GeneratorContext, scope: ScopeModel): List<Member> {
         val containers = context.containersOf(scope).map { c ->
             val from = c.from
             Member(

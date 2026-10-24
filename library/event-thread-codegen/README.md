@@ -179,6 +179,61 @@ Binding conventions:
   `TotalImpl : TotalContainer(CoroutineScope(Dispatchers.Main + SupervisorJob()))`.
 - With the DependencyProvider path, a missing binding fails the scope's first load.
 
+## Testing
+
+Generated into the test source set (`commonTest` / `test`), with `event-thread-test` and
+`kotlin-test` added to it - turn off with `generateTests = false`. Per scope:
+
+**`<Name>ScopeContract`** - abstract; extend it with the implementation under test:
+
+```kotlin
+class WorkContractTest : WorkScopeContract() {
+    override fun bindings() = WorkScopeDependencyBindings(testKoin.asDependencyProvider())
+    override fun params() = ListParams("test")
+}
+```
+
+Its tests check, against the schema: every binding is provided (a missing DependencyProvider
+binding fails here, not at app start), every handler is registered, `dependsOn`/`consumes` are
+registered, and every **example** holds. `Dispatchers.Main` runs on a test dispatcher (override
+`replaceMainDispatcher` to opt out); add your own `@BeforeTest` for anything else the
+implementation needs (a temp cache directory, ...).
+
+**Examples** - optional per handler, each a test of *your* implementation, its containers stubbed
+with the example's state (no I/O, no app wiring):
+
+```json
+{ "input": { "name": "org.example.ToggleTodo" }, "output": { "kind": "data", "type": <todos> },
+  "examples": [{ "name": "marksDone",
+    "given":  [{ "id": 1, "text": "milk", "done": false }],
+    "event":  { "id": 1 },
+    "expect": [{ "id": 1, "text": "milk", "done": true }] }] }
+```
+
+| Handler | Example fields |
+| --- | --- |
+| `data` | `given` (its state before), `event`, `expect` (its state after); `reads` |
+| `event` | `reads` (`{ "<container>": state }` for each container it reads), `event`, `emits` (the cascaded events' args, in order) |
+| `none` | - (nothing to check) |
+
+Values are JSON, turned into Kotlin at generation - no `@Serializable` needed: a `created` type or
+defined event is built from its declared fields; an existing class from a JSON object as
+`Type(key = value)` (constructor parameter names must match), from a string as an enum entry;
+`List`/`Set`/`Map` from arrays/objects. `event` omitted means an `object` event. Keep examples to
+deterministic handlers (no random ids, clocks, ...).
+
+**`<Name>ScopeProbe`** - the scope built from your bindings, with typed access to its containers:
+
+```kotlin
+@Test fun filtersDone() = runTest {
+    val probe = WorkScopeProbe(ListParams("t"), bindings)
+    probe.send(AddTodo("milk"))
+    probe.await(probe.todos) { it.size == 1 }         // probe.todos: the TodosContainer under test
+    probe.awaitEmitted<AddLimitReached>()              // probe.emitted: everything the scope processed
+    probe.close()
+}
+```
+
 ## Schema checks
 
 Before generating, the schema is verified as a whole - every problem reported at once:

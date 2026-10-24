@@ -32,6 +32,11 @@ abstract class EventThreadCodegenExtension @Inject constructor(private val objec
      * version - plugin and core are released together. */
     abstract val coreVersion: Property<String>
 
+    /** Also generates test support into the test source set - per scope a `<Name>ScopeContract`
+     * (extend it with your bindings) and a `<Name>ScopeProbe` - and adds `event-thread-test` and
+     * `kotlin-test` to it. Default `true`. */
+    abstract val generateTests: Property<Boolean>
+
     internal val selectedSource: Property<ConfigSource> = objects.property(ConfigSource::class.java)
     private var selectedType: Class<out ConfigSource>? = null
 

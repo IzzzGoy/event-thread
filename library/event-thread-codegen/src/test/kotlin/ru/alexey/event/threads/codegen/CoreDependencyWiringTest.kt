@@ -64,6 +64,18 @@ class CoreDependencyWiringTest {
         assertContains(apiDependencies(), "io.github.izzzgoy:event-thread-core:9.9.9")
     }
 
+    /** Prints `testImplementation` dependencies - where the generated contracts/probes need
+     * event-thread-test and kotlin-test. */
+    @Test
+    fun testSupportDependenciesGoToTheTestSourceSet() {
+        rootDir.resolve("settings.gradle.kts").writeText("""rootProject.name = "app"""")
+        rootDir.resolve("build.gradle.kts").writeText(appBuildScript().replace("configurations[\"api\"]", "configurations[\"testImplementation\"]"))
+
+        val deps = apiDependencies()
+        assertContains(deps, "io.github.izzzgoy:event-thread-test:${EventThreadCodegenPlugin.pluginVersion}")
+        assertContains(deps, "org.jetbrains.kotlin:kotlin-test:null")
+    }
+
     @Test
     fun optOutAddsNothing() {
         rootDir.resolve("settings.gradle.kts").writeText("""rootProject.name = "app"""")

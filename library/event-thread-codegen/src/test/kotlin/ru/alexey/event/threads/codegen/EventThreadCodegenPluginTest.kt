@@ -71,4 +71,18 @@ class EventThreadCodegenPluginTest {
         assertFalse(generatedDir.resolve("SettingsScope.kt").exists())
         assertTrue(generatedDir.resolve("TodoScope.kt").exists())
     }
+
+    private val testDir get() = projectDir.resolve("build/generated/eventThread/test/com/example/scopes")
+
+    @Test
+    fun testSupportIsGeneratedUnlessTurnedOff() {
+        buildScript("""register("Todo")""")
+        run()
+        assertTrue(testDir.resolve("TodoScopeContract.kt").exists())
+        assertTrue(testDir.resolve("TodoScopeProbe.kt").exists())
+
+        projectDir.resolve("build.gradle.kts").appendText("\neventThreadCodegen { generateTests = false }\n")
+        run()
+        assertFalse(testDir.resolve("TodoScopeContract.kt").exists())
+    }
 }

@@ -25,6 +25,14 @@ object TypedScopeSources {
         return files
     }
 
+    /** Test support for the same schema - contracts and probes, see [TestSourcesGenerator]. */
+    fun generateTests(packageName: String, scopes: List<ScopeModel>): List<FileSpec> =
+        TestSourcesGenerator(packageName).generate(GeneratorContext(packageName, scopes))
+
+    fun writeTestsTo(outputDirectory: File, packageName: String, scopes: List<ScopeModel>) {
+        generateTests(packageName, scopes).forEach { it.writeTo(outputDirectory) }
+    }
+
     /** Writes every generated file under [outputDirectory] (as a source root - package dirs are
      * created beneath it). */
     fun writeTo(outputDirectory: File, packageName: String, scopes: List<ScopeModel>) {

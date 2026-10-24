@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 (unreleased)
+
+### Added
+- **Generated test support** (`event-thread-codegen`, into the test source set; `generateTests`):
+  - `<Name>ScopeContract` - extend with your bindings; checks every binding is provided, handlers
+    and relations are registered, and every schema `example` holds against your implementation.
+  - Schema `examples` per handler (`given`/`reads`/`event`/`expect`/`emits`, JSON turned into
+    Kotlin at generation - no serialization needed).
+  - `<Name>ScopeProbe` - typed access to a scope's containers for behaviour tests, on the new
+    `TypedScopeProbe` (`event-thread-test`: `send`, `await`, `awaitEmitted`, `emitted`).
+- `EventHandler.EventCascader.preview(input)` - the events a cascader would emit, without a bus.
+
 ## 1.1.0
 
 ### Added

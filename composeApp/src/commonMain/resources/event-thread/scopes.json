@@ -15,7 +15,17 @@
             "value": "totalAdded",
             "typeKey": "Int"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "counts",
+            "given": 4,
+            "event": {
+              "text": "milk"
+            },
+            "expect": 5
+          }
+        ]
       },
       {
         "input": {
@@ -33,7 +43,33 @@
           "event": {
             "name": "org.company.sample.AddLimitReached"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "atLimitReports",
+            "reads": {
+              "totalAdded": 5
+            },
+            "event": {
+              "text": "milk"
+            },
+            "emits": [
+              {
+                "totalAdded": 5
+              }
+            ]
+          },
+          {
+            "name": "belowLimitIsQuiet",
+            "reads": {
+              "totalAdded": 2
+            },
+            "event": {
+              "text": "milk"
+            },
+            "emits": []
+          }
+        ]
       }
     ]
   },
@@ -115,7 +151,39 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "marksDone",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1
+            },
+            "expect": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": true
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -135,7 +203,34 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "removesOnlyThatTodo",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1
+            },
+            "expect": [
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -155,7 +250,30 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "renames",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1,
+              "text": "oat milk"
+            },
+            "expect": [
+              {
+                "id": 1,
+                "text": "oat milk",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -168,7 +286,17 @@
             "value": "showCompleted",
             "typeKey": "Boolean"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "hidesDone",
+            "given": true,
+            "event": {
+              "show": false
+            },
+            "expect": false
+          }
+        ]
       },
       {
         "input": {
@@ -181,7 +309,17 @@
             "value": "limitHits",
             "typeKey": "Int"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "countsWarnings",
+            "given": 2,
+            "event": {
+              "totalAdded": 5
+            },
+            "expect": 3
+          }
+        ]
       },
       {
         "input": {
@@ -271,7 +409,39 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "marksDone",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1
+            },
+            "expect": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": true
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -291,7 +461,34 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "removesOnlyThatTodo",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              },
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1
+            },
+            "expect": [
+              {
+                "id": 2,
+                "text": "bread",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -311,7 +508,30 @@
               }
             ]
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "renames",
+            "given": [
+              {
+                "id": 1,
+                "text": "milk",
+                "done": false
+              }
+            ],
+            "event": {
+              "id": 1,
+              "text": "oat milk"
+            },
+            "expect": [
+              {
+                "id": 1,
+                "text": "oat milk",
+                "done": false
+              }
+            ]
+          }
+        ]
       },
       {
         "input": {
@@ -324,7 +544,17 @@
             "value": "showCompleted",
             "typeKey": "Boolean"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "hidesDone",
+            "given": true,
+            "event": {
+              "show": false
+            },
+            "expect": false
+          }
+        ]
       },
       {
         "input": {
@@ -337,7 +567,17 @@
             "value": "limitHits",
             "typeKey": "Int"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "countsWarnings",
+            "given": 2,
+            "event": {
+              "totalAdded": 5
+            },
+            "expect": 3
+          }
+        ]
       },
       {
         "input": {
@@ -367,7 +607,17 @@
             "value": "selectedList",
             "typeKey": "String"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "selects",
+            "given": "Work",
+            "event": {
+              "name": "Personal"
+            },
+            "expect": "Personal"
+          }
+        ]
       }
     ]
   },
@@ -391,7 +641,17 @@
             "value": "draft",
             "typeKey": "String"
           }
-        }
+        },
+        "examples": [
+          {
+            "name": "replacesText",
+            "given": "",
+            "event": {
+              "text": "hi"
+            },
+            "expect": "hi"
+          }
+        ]
       }
     ]
   }

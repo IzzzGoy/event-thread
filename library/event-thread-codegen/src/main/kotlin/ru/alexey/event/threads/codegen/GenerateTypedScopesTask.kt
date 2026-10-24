@@ -28,6 +28,13 @@ abstract class GenerateTypedScopesTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDirectory: DirectoryProperty
 
+    @get:Input
+    abstract val generateTests: Property<Boolean>
+
+    /** Test support (contracts, probes) - added to the test source set. */
+    @get:OutputDirectory
+    abstract val testOutputDirectory: DirectoryProperty
+
     @TaskAction
     fun generate() {
         val scopes = ScopeSpecFormat.decode(scopesSpec.get())
@@ -37,5 +44,10 @@ abstract class GenerateTypedScopesTask : DefaultTask() {
         dir.deleteRecursively()
         dir.mkdirs()
         TypedScopeSources.writeTo(dir, packageName.get(), scopes)
+
+        val testDir = testOutputDirectory.get().asFile
+        testDir.deleteRecursively()
+        testDir.mkdirs()
+        if (generateTests.get()) TypedScopeSources.writeTestsTo(testDir, packageName.get(), scopes)
     }
 }

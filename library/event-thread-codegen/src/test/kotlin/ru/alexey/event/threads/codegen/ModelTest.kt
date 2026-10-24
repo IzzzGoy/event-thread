@@ -2,6 +2,7 @@ package ru.alexey.event.threads.codegen
 
 import ru.alexey.event.threads.codegen.model.ArgDef
 import ru.alexey.event.threads.codegen.model.DerivedModel
+import ru.alexey.event.threads.codegen.model.ExampleModel
 import ru.alexey.event.threads.codegen.model.EventModel
 import ru.alexey.event.threads.codegen.model.HandlerModel
 import ru.alexey.event.threads.codegen.model.HandlerOutput
@@ -162,6 +163,25 @@ class ModelTest {
         assertFailsWith<IllegalArgumentException> { // written by a handler AND derived
             ScopeModel("S", handlers = listOf(writes), derived = listOf(DerivedModel(list, listOf(list))))
         }
+    }
+
+    @Test
+    fun examplesMustFitTheHandlersKind() {
+        val state = ArgDef.Primitive("n", "Int")
+        val one = kotlinx.serialization.json.JsonPrimitive(1)
+        assertFailsWith<IllegalArgumentException> { // state handler without expect
+            HandlerModel(EventModel("A"), HandlerOutput.Data(state), examples = listOf(ExampleModel(given = one)))
+        }
+        assertFailsWith<IllegalArgumentException> { // cascader without emits
+            HandlerModel(EventModel("A"), HandlerOutput.Event(EventModel("B")), examples = listOf(ExampleModel()))
+        }
+        assertFailsWith<IllegalArgumentException> { // side effect: nothing to check
+            HandlerModel(EventModel("A"), examples = listOf(ExampleModel()))
+        }
+        assertFailsWith<IllegalArgumentException> { // reads a container the handler doesn't read
+            HandlerModel(EventModel("A"), HandlerOutput.Event(EventModel("B")), examples = listOf(ExampleModel(reads = mapOf("other" to one), emits = emptyList())))
+        }
+        HandlerModel(EventModel("A"), HandlerOutput.Data(state), examples = listOf(ExampleModel(given = one, expect = one)))
     }
 
     @Test

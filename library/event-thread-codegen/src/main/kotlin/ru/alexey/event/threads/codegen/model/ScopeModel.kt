@@ -2,6 +2,7 @@ package ru.alexey.event.threads.codegen.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import ru.alexey.event.threads.OutputMismatchBehavior
 import ru.alexey.event.threads.Privacy
 
@@ -87,9 +88,51 @@ data class HandlerModel(
     /** Containers this handler reads but doesn't update, by state type (a `data` output type in
      * the same scope) - each becomes a `ContainerSnapshot` in the generated base's `Deps`. */
     val reads: List<ArgDef> = emptyList(),
+    /** Input -> output examples, each generated as a test of the implementation (see
+     * [ExampleModel]). Not for `none` outputs - a side effect has nothing to check. */
+    val examples: List<ExampleModel> = emptyList(),
 ) {
     init {
         name?.let { requireIdentifier(it, "Handler name") }
+        examples.forEachIndexed { i, example ->
+            val label = "${input.name} example ${example.name ?: "#$i"}"
+            when (output) {
+                is HandlerOutput.Data -> require(example.given != null && example.expect != null) {
+                    "$label: a state handler's example needs `given` and `expect`"
+                }
+                is HandlerOutput.Event -> require(example.emits != null) {
+                    "$label: a cascading handler's example needs `emits`"
+                }
+                HandlerOutput.None -> throw IllegalArgumentException("$label: a side effect has no output to check")
+            }
+            val unknownReads = example.reads.keys - reads.map { it.fieldName ?: "" }.toSet()
+            require(unknownReads.isEmpty()) { "$label: `reads` $unknownReads aren't containers this handler reads" }
+        }
+    }
+}
+
+/**
+ * One example of a handler: the state it starts from, the event, what must come out. Values are
+ * JSON, turned into Kotlin at generation (`{"id": 1, "text": "a"}` for a `Todo` becomes
+ * `Todo(id = 1, text = "a")` - constructor parameter names must match the keys).
+ */
+@Serializable
+data class ExampleModel(
+    /** Test name suffix; defaults to its index. */
+    val name: String? = null,
+    /** The handler's own state before the event (state handlers). */
+    val given: JsonElement? = null,
+    /** State of each container the handler reads, by container name. */
+    val reads: Map<String, JsonElement> = emptyMap(),
+    /** The event's constructor arguments; omitted for an `object` event. */
+    val event: JsonElement? = null,
+    /** The handler's own state after the event (state handlers). */
+    val expect: JsonElement? = null,
+    /** The events it cascades, in order - each the arguments of the declared output event. */
+    val emits: List<JsonElement>? = null,
+) {
+    init {
+        name?.let { requireIdentifier(it, "Example name") }
     }
 }
 

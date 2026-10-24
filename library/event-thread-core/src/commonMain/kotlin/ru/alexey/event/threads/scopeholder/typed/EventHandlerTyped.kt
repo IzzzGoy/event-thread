@@ -60,6 +60,10 @@ sealed interface EventHandler<Event> {
 
         protected abstract fun cascade(input: E): List<Event>
 
+        /** The events [cascade] returns for [input], without dispatching them - for tests and
+         * inspection (a cascader needn't be wired into a scope for this). */
+        fun preview(input: E): List<Event> = cascade(input)
+
         internal fun attach(bus: IEventBus) {
             val current = eventBus
             check(current == null || current === bus) {

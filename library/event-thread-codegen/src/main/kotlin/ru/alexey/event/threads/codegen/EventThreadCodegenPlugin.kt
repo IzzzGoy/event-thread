@@ -22,6 +22,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
             EventThreadCodegenExtension::class.java,
         ).apply {
             addCoreDependency.convention(true)
+            generateTests.convention(true)
             coreVersion.convention(pluginVersion)
             selectedSource.finalizeValueOnRead()
         }
@@ -43,12 +44,30 @@ class EventThreadCodegenPlugin : Plugin<Project> {
                     .map(ScopeSpecFormat::encode)
             )
             task.outputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/kotlin"))
+            task.generateTests.set(extension.generateTests)
+            task.testOutputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/test"))
         }
 
         KOTLIN_PLUGINS.forEach { (pluginId, sourceSetName) ->
             project.plugins.withId(pluginId) {
-                val sourceSet = project.extensions.getByType(KotlinProjectExtension::class.java)
-                    .sourceSets.getByName(sourceSetName)
+                val kotlin = project.extensions.getByType(KotlinProjectExtension::class.java)
+                val sourceSet = kotlin.sourceSets.getByName(sourceSetName)
+
+                // Test support: generated contracts/probes + what they're built on.
+                val testSourceSet = kotlin.sourceSets.getByName(TEST_SOURCE_SETS.getValue(sourceSetName))
+                testSourceSet.kotlin.srcDir(generate.flatMap { it.testOutputDirectory })
+                project.configurations.named(testSourceSet.implementationConfigurationName) { impl ->
+                    impl.dependencies.addAllLater(project.provider {
+                        if (extension.generateTests.get()) {
+                            listOf(
+                                project.dependencies.create("$TEST_COORDINATES:${extension.coreVersion.get()}"),
+                                project.dependencies.create("org.jetbrains.kotlin:kotlin-test"),
+                            )
+                        } else {
+                            emptyList()
+                        }
+                    })
+                }
                 // A task-backed provider, so the dependency on `generate` is implicit.
                 sourceSet.kotlin.srcDir(generate.flatMap { it.outputDirectory })
                 // Plain directory paths, not `resources.sourceDirectories` itself: that collection
@@ -77,6 +96,9 @@ class EventThreadCodegenPlugin : Plugin<Project> {
         const val TASK_NAME = "generateTypedScopes"
 
         private const val CORE_COORDINATES = "io.github.izzzgoy:event-thread-core"
+        private const val TEST_COORDINATES = "io.github.izzzgoy:event-thread-test"
+
+        private val TEST_SOURCE_SETS = mapOf("commonMain" to "commonTest", "main" to "test")
 
         private val KOTLIN_PLUGINS = mapOf(
             "org.jetbrains.kotlin.multiplatform" to "commonMain",
