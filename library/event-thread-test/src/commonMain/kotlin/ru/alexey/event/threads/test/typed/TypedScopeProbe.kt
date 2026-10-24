@@ -15,6 +15,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import ru.alexey.event.threads.Scope
 import ru.alexey.event.threads.bus.Event
+import ru.alexey.event.threads.test.scenario.ScenarioRecorder
+import ru.alexey.event.threads.test.scenario.ScopeScenario
+import ru.alexey.event.threads.test.scenario.scenario
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -27,23 +30,38 @@ import kotlin.time.Duration.Companion.seconds
  */
 abstract class TypedScopeProbe(val scope: Scope) : AutoCloseable {
 
-    private val recorder = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val collector = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val recorded = MutableStateFlow<List<Event>>(emptyList())
 
     /** Every event the scope processed since the probe was built, in processing order. */
     val emitted: StateFlow<List<Event>> = recorded.asStateFlow()
 
+    /** The same events, recorded for the scenario DSL - see [scenario]. */
+    val recorder = ScenarioRecorder()
+
     init {
         // UNDISPATCHED: subscribed before the constructor returns, so the first send is recorded.
         // (Touching eventBus also wires the scope.)
-        recorder.launch(start = CoroutineStart.UNDISPATCHED) {
-            scope.eventBus.output.collect { event -> recorded.update { it + event } }
+        collector.launch(start = CoroutineStart.UNDISPATCHED) {
+            scope.eventBus.output.collect { event ->
+                recorder.record(scope.key, event)
+                recorded.update { it + event }
+            }
         }
     }
 
     /** Dispatches [event] into the scope. */
     fun send(event: Event) {
         scope + event
+    }
+
+    /**
+     * Asserts on this scope's recorded events and state with the scenario DSL:
+     * `probe.scenario { expectEvents("AddTodo", "AddLimitReached"); expectState(probe.todos, "one todo") { it.size == 1 } }`.
+     * Await what you assert on first - the recording reflects only what was processed so far.
+     */
+    fun scenario(block: ScopeScenario.() -> Unit) {
+        scenario(recorder) { scope(scope.key, block) }
     }
 
     /** Waits until [state]'s value satisfies [until], and returns it. */
@@ -68,7 +86,7 @@ abstract class TypedScopeProbe(val scope: Scope) : AutoCloseable {
         withContext(Dispatchers.Default) { withTimeout(timeout) { block() } }
 
     override fun close() {
-        recorder.cancel()
+        collector.cancel()
         scope.close()
     }
 

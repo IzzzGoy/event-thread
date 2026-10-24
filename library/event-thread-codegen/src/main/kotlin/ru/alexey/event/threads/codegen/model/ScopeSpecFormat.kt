@@ -25,5 +25,15 @@ object ScopeSpecFormat {
 
     fun encode(scopes: List<ScopeModel>): String = json.encodeToString(serializer, scopes)
 
-    fun decode(spec: String): List<ScopeModel> = json.decodeFromString(serializer, spec)
+    fun decode(spec: String): List<ScopeModel> = decodeDocument(spec).scopes
+
+    /** A schema file: the versioned object form, or the 1.1 bare array (format 1.0, no version). */
+    fun decodeDocument(spec: String): ScopeDocument =
+        if (spec.trimStart().startsWith("[")) {
+            ScopeDocument(scopes = json.decodeFromString(serializer, spec))
+        } else {
+            json.decodeFromString(ScopeDocument.serializer(), spec)
+        }
+
+    fun encodeDocument(document: ScopeDocument): String = json.encodeToString(ScopeDocument.serializer(), document)
 }

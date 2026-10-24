@@ -32,7 +32,12 @@ class GeneratedPackages(root: String) {
  * - a handler base per distinct handler - the same handler declared in two scopes is one base.
  * Two different things that would get the same name are rejected rather than one silently winning.
  */
-internal class GeneratorContext(root: String, val scopes: List<ScopeModel>) {
+internal class GeneratorContext(
+    root: String,
+    val scopes: List<ScopeModel>,
+    /** File comment of every generated file - with the versions it was generated from. */
+    val header: String = GENERATED,
+) {
 
     init {
         SchemaValidator.validate(scopes)

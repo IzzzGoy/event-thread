@@ -43,7 +43,26 @@ class TestSourcesGeneratorTest {
         assertContains(source, "protected abstract fun bindings(): ListScopeBindings")
         assertContains(source, "protected abstract fun params(): ListParams")
         assertContains(source, "@Test public fun everyBindingIsProvided() { val scope = ListScope(params(), bindings()) try { scope.eventBus } finally { scope.close() } }")
-        assertContains(source, "assertTrue(Add::class.simpleName in handled")
+        assertContains(source, "assertEquals(1, handled[Add::class.simpleName]?.actions?.size ?: 0, \"handlers registered for Add\")")
+    }
+
+    @Test
+    fun eventFlowIsCheckedThroughTheLiveScopesGraph() {
+        val count = ArgDef.Primitive("count", "Int")
+        val scope = ScopeModel("Tally", handlers = listOf(
+            HandlerModel(EventModel("com.example.Add"), HandlerOutput.Data(count)),
+            HandlerModel(EventModel("com.example.Add"), HandlerOutput.Event(EventModel("com.example.Limit"))),
+            HandlerModel(EventModel("com.example.Limit")),
+        ))
+
+        val source = flat(tests(scope).file("TallyScopeContract"))
+
+        assertContains(source, "val graph = scope.metadata.toEventGraph(\"Tally\")")
+        assertContains(source, "assertEquals(setOf<String>(\"Limit\"), events[Add::class.simpleName]?.producedTypes.orEmpty(), \"events Add cascades into\")")
+        assertContains(source, "graph.assertReaches(\"Tally\", \"Add\", \"Limit\")")
+        assertContains(source, "assertEquals(setOf<String>(), events[Limit::class.simpleName]?.producedTypes.orEmpty()")
+        // two handlers for Add, both counted
+        assertContains(source, "assertEquals(2, handled[Add::class.simpleName]?.actions?.size ?: 0")
     }
 
     @Test

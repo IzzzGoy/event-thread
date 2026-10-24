@@ -564,10 +564,15 @@ it and the compiler checks nothing is missing, or bind them in a DependencyProvi
 (`registerWorkScope()`). The schema's event flow is verified at generation (e.g. a cascaded event
 no scope handles or consumes fails the build).
 
-Tests are generated too: a per-scope contract (extend it with your bindings - checks bindings,
+Schemas are versioned (`format` of the schema language, semver `version` of your contract - a
+`baseline` makes `check` enforce the bump its changes need), validate in editors through a
+published JSON Schema, and come with an event-flow diagram and per-scope implementation task files
+in `build/reports/eventThread`. Tests are generated too: a per-scope contract (extend it with your bindings - checks bindings,
 relations, and each schema `example` against your implementation) and a typed probe for your own
 behaviour tests.
 
+What the generated test support runs and checks:
+[library/event-thread-codegen/TESTING.md](library/event-thread-codegen/TESTING.md).
 Schema reference, generated layout and binding conventions:
 [library/event-thread-codegen/README.md](library/event-thread-codegen/README.md). The sample app
 ships its whole scope graph both ways - DSL in `TodoApp.kt`, typed in `typed/` +

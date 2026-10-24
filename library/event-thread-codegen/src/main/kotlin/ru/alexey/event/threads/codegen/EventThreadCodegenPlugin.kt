@@ -23,6 +23,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
         ).apply {
             addCoreDependency.convention(true)
             generateTests.convention(true)
+            strictSchema.convention(false)
             coreVersion.convention(pluginVersion)
             selectedSource.finalizeValueOnRead()
         }
@@ -31,22 +32,35 @@ class EventThreadCodegenPlugin : Plugin<Project> {
         val resourceDirectories = project.objects.fileCollection()
         val sourceContext = ConfigSourceContext(resourceDirectories)
 
+        // The schema document, shared by generation and the compatibility check.
+        val spec = project.provider {
+            extension.selectedSource.orNull
+                ?: error("`${EventThreadCodegenExtension.NAME}` has no schema source - add e.g. `source<ResourceConfigSource> { }`")
+        }
+            .flatMap { it.document(sourceContext) }
+            .map(ScopeSpecFormat::encodeDocument)
+
         val generate = project.tasks.register(TASK_NAME, GenerateTypedScopesTask::class.java) { task ->
             task.group = "event thread"
             task.description = "Generates abstract typed scopes from the spec selected in `${EventThreadCodegenExtension.NAME}`."
             task.packageName.set(extension.packageName)
-            task.scopesSpec.set(
-                project.provider {
-                    extension.selectedSource.orNull
-                        ?: error("`${EventThreadCodegenExtension.NAME}` has no schema source - add e.g. `source<ResourceConfigSource> { }`")
-                }
-                    .flatMap { it.schema(sourceContext) }
-                    .map(ScopeSpecFormat::encode)
-            )
+            task.scopesSpec.set(spec)
             task.outputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/kotlin"))
             task.generateTests.set(extension.generateTests)
+            task.strictSchema.set(extension.strictSchema)
+            task.generatorVersion.set(pluginVersion)
             task.testOutputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/test"))
+            task.reportDirectory.set(project.layout.buildDirectory.dir("reports/eventThread"))
         }
+
+        val compatibility = project.tasks.register(COMPATIBILITY_TASK_NAME, CheckScopesCompatibilityTask::class.java) { task ->
+            task.group = "verification"
+            task.description = "Checks the event-thread schema's version against its changes since `${EventThreadCodegenExtension.NAME}.baseline`."
+            task.scopesSpec.set(spec)
+            task.baseline.set(extension.baseline)
+            task.reportFile.set(project.layout.buildDirectory.file("reports/eventThread/compatibility.txt"))
+        }
+        project.tasks.matching { it.name == "check" }.configureEach { it.dependsOn(compatibility) }
 
         KOTLIN_PLUGINS.forEach { (pluginId, sourceSetName) ->
             project.plugins.withId(pluginId) {
@@ -94,6 +108,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
 
     companion object {
         const val TASK_NAME = "generateTypedScopes"
+        const val COMPATIBILITY_TASK_NAME = "checkScopesCompatibility"
 
         private const val CORE_COORDINATES = "io.github.izzzgoy:event-thread-core"
         private const val TEST_COORDINATES = "io.github.izzzgoy:event-thread-test"

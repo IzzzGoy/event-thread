@@ -1,0 +1,663 @@
+{
+  "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
+  "format": "1.0",
+  "version": "1.0.0",
+  "scopes": [
+    {
+      "name": "TodoDomain",
+      "description": "Business rules over todo events - reports its verdict back as events",
+      "handlers": [
+        {
+          "input": {
+            "name": "org.company.sample.AddTodo"
+          },
+          "name": "CountAddedTodos",
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "totalAdded",
+              "typeKey": "Int"
+            }
+          },
+          "examples": [
+            {
+              "name": "counts",
+              "given": 4,
+              "event": {
+                "text": "milk"
+              },
+              "expect": 5
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.AddTodo"
+          },
+          "reads": [
+            {
+              "kind": "primitive",
+              "value": "totalAdded",
+              "typeKey": "Int"
+            }
+          ],
+          "output": {
+            "kind": "event",
+            "event": {
+              "name": "org.company.sample.AddLimitReached"
+            }
+          },
+          "examples": [
+            {
+              "name": "atLimitReports",
+              "reads": {
+                "totalAdded": 5
+              },
+              "event": {
+                "text": "milk"
+              },
+              "emits": [
+                {
+                  "totalAdded": 5
+                }
+              ]
+            },
+            {
+              "name": "belowLimitIsQuiet",
+              "reads": {
+                "totalAdded": 2
+              },
+              "event": {
+                "text": "milk"
+              },
+              "emits": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Work",
+      "description": "The Work todo list (was: implements TodoListBase)",
+      "params": {
+        "kind": "primitive",
+        "value": "params",
+        "typeKey": "org.company.sample.TodoListBase.Params"
+      },
+      "consumes": [
+        "org.company.sample.AddLimitReached"
+      ],
+      "derived": [
+        {
+          "state": {
+            "kind": "primitive",
+            "value": "visibleTodos",
+            "typeKey": "org.company.sample.VisibleTodos"
+          },
+          "from": [
+            {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            },
+            {
+              "kind": "primitive",
+              "value": "showCompleted",
+              "typeKey": "Boolean"
+            }
+          ]
+        }
+      ],
+      "handlers": [
+        {
+          "input": {
+            "name": "org.company.sample.AddTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "input": {
+            "name": "org.company.sample.ToggleTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "marksDone",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1
+              },
+              "expect": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": true
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.DeleteTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "removesOnlyThatTodo",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1
+              },
+              "expect": [
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.SaveTodoText"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "renames",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1,
+                "text": "oat milk"
+              },
+              "expect": [
+                {
+                  "id": 1,
+                  "text": "oat milk",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.SetShowCompleted"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "showCompleted",
+              "typeKey": "Boolean"
+            }
+          },
+          "examples": [
+            {
+              "name": "hidesDone",
+              "given": true,
+              "event": {
+                "show": false
+              },
+              "expect": false
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.AddLimitReached"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "limitHits",
+              "typeKey": "Int"
+            }
+          },
+          "examples": [
+            {
+              "name": "countsWarnings",
+              "given": 2,
+              "event": {
+                "totalAdded": 5
+              },
+              "expect": 3
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "ru.alexey.event.threads.LifecycleEvents"
+          },
+          "output": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personal",
+      "description": "The Personal todo list (was: implements TodoListBase)",
+      "params": {
+        "kind": "primitive",
+        "value": "params",
+        "typeKey": "org.company.sample.TodoListBase.Params"
+      },
+      "consumes": [
+        "org.company.sample.AddLimitReached"
+      ],
+      "derived": [
+        {
+          "state": {
+            "kind": "primitive",
+            "value": "visibleTodos",
+            "typeKey": "org.company.sample.VisibleTodos"
+          },
+          "from": [
+            {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            },
+            {
+              "kind": "primitive",
+              "value": "showCompleted",
+              "typeKey": "Boolean"
+            }
+          ]
+        }
+      ],
+      "handlers": [
+        {
+          "input": {
+            "name": "org.company.sample.AddTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "input": {
+            "name": "org.company.sample.ToggleTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "marksDone",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1
+              },
+              "expect": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": true
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.DeleteTodo"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "removesOnlyThatTodo",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                },
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1
+              },
+              "expect": [
+                {
+                  "id": 2,
+                  "text": "bread",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.SaveTodoText"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "generics",
+              "baseClassName": "List",
+              "field": "todos",
+              "parameters": [
+                {
+                  "kind": "primitive",
+                  "value": "todo",
+                  "typeKey": "org.company.sample.Todo"
+                }
+              ]
+            }
+          },
+          "examples": [
+            {
+              "name": "renames",
+              "given": [
+                {
+                  "id": 1,
+                  "text": "milk",
+                  "done": false
+                }
+              ],
+              "event": {
+                "id": 1,
+                "text": "oat milk"
+              },
+              "expect": [
+                {
+                  "id": 1,
+                  "text": "oat milk",
+                  "done": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.SetShowCompleted"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "showCompleted",
+              "typeKey": "Boolean"
+            }
+          },
+          "examples": [
+            {
+              "name": "hidesDone",
+              "given": true,
+              "event": {
+                "show": false
+              },
+              "expect": false
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "org.company.sample.AddLimitReached"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "limitHits",
+              "typeKey": "Int"
+            }
+          },
+          "examples": [
+            {
+              "name": "countsWarnings",
+              "given": 2,
+              "event": {
+                "totalAdded": 5
+              },
+              "expect": 3
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "ru.alexey.event.threads.LifecycleEvents"
+          },
+          "output": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TodoTabs",
+      "description": "The selected list - app state, alive for the whole session",
+      "dependsOn": [
+        "TodoDomain"
+      ],
+      "handlers": [
+        {
+          "input": {
+            "name": "org.company.sample.SelectList"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "selectedList",
+              "typeKey": "String"
+            }
+          },
+          "examples": [
+            {
+              "name": "selects",
+              "given": "Work",
+              "event": {
+                "name": "Personal"
+              },
+              "expect": "Personal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TodoDraft",
+      "description": "Text of the todo being typed or edited",
+      "params": {
+        "kind": "primitive",
+        "value": "params",
+        "typeKey": "org.company.sample.TodoDraft.Params"
+      },
+      "handlers": [
+        {
+          "input": {
+            "name": "org.company.sample.SetDraftText"
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "draft",
+              "typeKey": "String"
+            }
+          },
+          "examples": [
+            {
+              "name": "replacesText",
+              "given": "",
+              "event": {
+                "text": "hi"
+              },
+              "expect": "hi"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -104,8 +104,20 @@ class EventBus(
     private val _output = MutableSharedFlow<Event>(replay = 1)
     override val output = _output.asSharedFlow()
 
+    /** Per event type: its primary registration's metadata, with the actions (and declared
+     * outputs) of every registration merged alongside it - several handlers for one event (several
+     * `thread<E>()`s, or a typed scope's handlers for the same event) all show, in run order. */
     override val metadata
-        get () = subscribers.map { it.key.simpleName.orEmpty() to it.value.eventMetadatas }.toMap()
+        get () = subscribers.map { (key, primary) ->
+            val merged = mergedSubscribers[key].orEmpty().map { it.eventMetadatas }
+            val info = primary.eventMetadatas
+            key.simpleName.orEmpty() to if (merged.isEmpty()) info else info.copy(
+                metadata = info.metadata.copy(
+                    allowedOutputs = info.metadata.allowedOutputs + merged.flatMap { it.metadata.allowedOutputs },
+                ),
+                actions = info.actions + merged.flatMap { it.actions },
+            )
+        }.toMap()
 
     /**
      * Actions come from the primary registration plus any later-merged registrations for

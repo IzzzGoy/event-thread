@@ -16,6 +16,9 @@ plugins {
 eventThreadCodegen {
     packageName = "org.company.sample"
     source<ResourceConfigSource> { path = "event-thread/scopes.json" }
+    // The schema as last released: `check` fails if scopes.json's `version` isn't bumped as its
+    // changes since then require (MAJOR/MINOR/PATCH). Refresh this copy at each release.
+    baseline = layout.projectDirectory.file("event-thread/scopes.baseline.json")
 }
 
 

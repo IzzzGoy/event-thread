@@ -5,6 +5,7 @@ import org.gradle.api.provider.Provider
 import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.provider.ValueSource
 import org.gradle.api.provider.ValueSourceParameters
+import ru.alexey.event.threads.codegen.model.ScopeDocument
 import ru.alexey.event.threads.codegen.model.ScopeModel
 import ru.alexey.event.threads.codegen.model.ScopeSpecFormat
 import java.net.URI
@@ -27,9 +28,11 @@ abstract class UrlConfigSource @Inject constructor(
 
     abstract val url: Property<String>
 
-    override fun schema(context: ConfigSourceContext): Provider<List<ScopeModel>> =
+    override fun schema(context: ConfigSourceContext): Provider<List<ScopeModel>> = document(context).map { it.scopes }
+
+    override fun document(context: ConfigSourceContext): Provider<ScopeDocument> =
         providers.of(Fetch::class.java) { it.parameters.url.set(url) }
-            .map(ScopeSpecFormat::decode)
+            .map(ScopeSpecFormat::decodeDocument)
 
     abstract class Fetch : ValueSource<String, Fetch.Parameters> {
         interface Parameters : ValueSourceParameters {

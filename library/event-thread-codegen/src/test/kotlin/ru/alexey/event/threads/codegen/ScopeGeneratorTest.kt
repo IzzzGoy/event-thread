@@ -59,6 +59,7 @@ class ScopeGeneratorTest {
                 "com.example.containers.TodoListContainer", "com.example.containers.DraftContainer",
                 "com.example.models.AddTodo", "com.example.models.SetDraft", "com.example.models.Log",
                 "com.example.models.TodoListParams",
+                "com.example.scopes.ScopesSchema",
             ),
             files,
         )
@@ -199,7 +200,7 @@ class ScopeGeneratorTest {
             ScopeModel("Tags", params = ArgDef.Generics("List", listOf(ArgDef.Primitive("tag", "String")))),
         )
 
-        assertEquals(setOf("ItemScope", "TagsScope"), files.map { it.name }.toSet())
+        assertEquals(setOf("ItemScope", "TagsScope", "ScopesSchema"), files.map { it.name }.toSet())
         assertContains(flat(files.file("com.example.scopes.TagsScope")), "ScopeKey<List<String>>")
     }
 

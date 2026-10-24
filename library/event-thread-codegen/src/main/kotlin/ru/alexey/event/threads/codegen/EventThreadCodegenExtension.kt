@@ -2,6 +2,7 @@ package ru.alexey.event.threads.codegen
 
 import org.gradle.api.Action
 import org.gradle.api.model.ObjectFactory
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import ru.alexey.event.threads.codegen.source.ConfigSource
 import javax.inject.Inject
@@ -36,6 +37,14 @@ abstract class EventThreadCodegenExtension @Inject constructor(private val objec
      * (extend it with your bindings) and a `<Name>ScopeProbe` - and adds `event-thread-test` and
      * `kotlin-test` to it. Default `true`. */
     abstract val generateTests: Property<Boolean>
+
+    /** Schema warnings (e.g. a cascade loop) fail the build instead of being logged. Default `false`. */
+    abstract val strictSchema: Property<Boolean>
+
+    /** The schema as last released - `checkScopesCompatibility` (part of `check`) fails if the
+     * current schema's `version` isn't bumped as its changes require (MAJOR/MINOR/PATCH). Unset: no
+     * check. Typically a copy of the schema committed at each release. */
+    abstract val baseline: RegularFileProperty
 
     internal val selectedSource: Property<ConfigSource> = objects.property(ConfigSource::class.java)
     private var selectedType: Class<out ConfigSource>? = null

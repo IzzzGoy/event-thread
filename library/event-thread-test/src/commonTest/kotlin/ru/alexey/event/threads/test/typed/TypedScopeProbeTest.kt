@@ -63,4 +63,18 @@ class TypedScopeProbeTest {
         assertEquals(Pong(30), probe.awaitEmitted<Pong> { it.n == 30 })
         probe.close()
     }
+
+    @Test
+    fun scenarioDslWorksOnTheProbesRecording() = runTest {
+        val probe = Probe()
+
+        probe.send(Ping(4))
+        probe.awaitEmitted<Pong>()
+
+        probe.scenario {
+            expectEvents("Ping", "Pong")
+            expectState(probe.hits, 4)
+        }
+        probe.close()
+    }
 }

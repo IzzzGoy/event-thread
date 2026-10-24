@@ -44,6 +44,6 @@ class ModelsGenerator(private val packageName: String) {
         return eventFiles + typeFiles
     }
 
-    private fun file(context: GeneratorContext, name: String, type: TypeSpec) =
-        FileSpec.builder(context.packages.models, name).addFileComment(GENERATED).addType(type).build()
+    private fun file(context: GeneratorContext, name: String, type: TypeSpec): FileSpec =
+        FileSpec.builder(context.packages.models, name).generatedBy(context).addType(type).build()
 }

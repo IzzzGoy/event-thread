@@ -30,7 +30,7 @@ class EventsGenerator(private val packageName: String) {
     internal fun generate(context: GeneratorContext): List<FileSpec> =
         context.handlers.groupBy { it.event.simpleName }.map { (event, handlers) ->
             FileSpec.builder(context.packages.events, "${event}Handler")
-                .addFileComment(GENERATED)
+                .generatedBy(context)
                 .apply { handlers.forEach { addType(base(context, it)) } }
                 .build()
         }

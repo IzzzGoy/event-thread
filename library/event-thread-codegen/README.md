@@ -49,10 +49,26 @@ a `ValueSource`), so the configuration cache never replays a stale schema.
 
 ## The schema
 
-A JSON array of scopes:
+A versioned document:
 
 ```json
-[{
+{
+  "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
+  "format": "1.0",
+  "version": "1.0.0",
+  "scopes": [ ... ]
+}
+```
+
+`$schema` points editors at [`scopes.schema.json`](scopes.schema.json) (completion, inline
+errors - also what an AI agent should validate against); `format` and `version` are explained in
+[Versioning](#versioning). A bare array of scopes (the 1.1 format) still reads, as format 1.0
+without a version.
+
+A scope:
+
+```json
+{
   "name": "Work",
   "description": "The Work todo list",
   "params": { "kind": "primitive", "value": "params", "typeKey": "org.example.ListParams" },
@@ -71,7 +87,7 @@ A JSON array of scopes:
     { "input": { "name": "ru.alexey.event.threads.LifecycleEvents" },
       "output": { "kind": "none" } }
   ]
-}]
+}
 ```
 
 ### Scope
@@ -182,57 +198,76 @@ Binding conventions:
 ## Testing
 
 Generated into the test source set (`commonTest` / `test`), with `event-thread-test` and
-`kotlin-test` added to it - turn off with `generateTests = false`. Per scope:
+`kotlin-test` added - off with `generateTests = false`. Per scope:
 
-**`<Name>ScopeContract`** - abstract; extend it with the implementation under test:
+- **`<Name>ScopeContract`** - an abstract test class; **runs only in a subclass you write**
+  (supplying `bindings()` and `params()`). Checks every binding is provided, handlers and
+  relations are registered, and every schema **example** holds against your handler
+  implementation (containers stubbed with the example's state).
+- **`<Name>ScopeProbe`** - **not a test**: a helper for your own behaviour tests (the scope built
+  from your real bindings, typed containers, `send`/`await`/`emitted`); runs only when a test
+  creates one.
 
-```kotlin
-class WorkContractTest : WorkScopeContract() {
-    override fun bindings() = WorkScopeDependencyBindings(testKoin.asDependencyProvider())
-    override fun params() = ListParams("test")
-}
-```
-
-Its tests check, against the schema: every binding is provided (a missing DependencyProvider
-binding fails here, not at app start), every handler is registered, `dependsOn`/`consumes` are
-registered, and every **example** holds. `Dispatchers.Main` runs on a test dispatcher (override
-`replaceMainDispatcher` to opt out); add your own `@BeforeTest` for anything else the
-implementation needs (a temp cache directory, ...).
-
-**Examples** - optional per handler, each a test of *your* implementation, its containers stubbed
-with the example's state (no I/O, no app wiring):
+Examples are written per handler in the schema:
 
 ```json
-{ "input": { "name": "org.example.ToggleTodo" }, "output": { "kind": "data", "type": <todos> },
-  "examples": [{ "name": "marksDone",
-    "given":  [{ "id": 1, "text": "milk", "done": false }],
-    "event":  { "id": 1 },
-    "expect": [{ "id": 1, "text": "milk", "done": true }] }] }
+"examples": [{ "name": "marksDone",
+  "given":  [{ "id": 1, "text": "milk", "done": false }],
+  "event":  { "id": 1 },
+  "expect": [{ "id": 1, "text": "milk", "done": true }] }]
 ```
 
-| Handler | Example fields |
-| --- | --- |
-| `data` | `given` (its state before), `event`, `expect` (its state after); `reads` |
-| `event` | `reads` (`{ "<container>": state }` for each container it reads), `event`, `emits` (the cascaded events' args, in order) |
-| `none` | - (nothing to check) |
+`given`/`expect` for state handlers, `reads` + `emits` for cascading ones; values are JSON turned
+into Kotlin at generation (no `@Serializable` needed - constructor parameter names must match the
+keys). Keep examples to deterministic handlers.
 
-Values are JSON, turned into Kotlin at generation - no `@Serializable` needed: a `created` type or
-defined event is built from its declared fields; an existing class from a JSON object as
-`Type(key = value)` (constructor parameter names must match), from a string as an enum entry;
-`List`/`Set`/`Map` from arrays/objects. `event` omitted means an `object` event. Keep examples to
-deterministic handlers (no random ids, clocks, ...).
+**[TESTING.md](TESTING.md)** describes exactly what runs when, what each test checks and doesn't,
+and how the probe behaves.
 
-**`<Name>ScopeProbe`** - the scope built from your bindings, with typed access to its containers:
+## Versioning
 
-```kotlin
-@Test fun filtersDone() = runTest {
-    val probe = WorkScopeProbe(ListParams("t"), bindings)
-    probe.send(AddTodo("milk"))
-    probe.await(probe.todos) { it.size == 1 }         // probe.todos: the TodosContainer under test
-    probe.awaitEmitted<AddLimitReached>()              // probe.emitted: everything the scope processed
-    probe.close()
-}
-```
+Two versions, two meanings:
+
+- **`format`** - the schema *language* (`major.minor`). A plugin reads any format with its own
+  major and a minor up to its own; a newer one fails with "update event-thread-codegen" (it may use
+  fields this plugin doesn't know). Additions to the language bump the minor and stay optional; a
+  major format change comes with a major plugin release.
+- **`version`** - the semver of *your* contract. With a `baseline` - the schema as last released -
+  `checkScopesCompatibility` (part of `check`) classifies every change and fails if `version`
+  isn't bumped enough:
+
+  | Bump | Changes |
+  | --- | --- |
+  | MAJOR | anything existing removed or changed in meaning: a scope, handler, container or relation removed; a state, params, event or output type changed; a handler's `reads` changed (its `Deps`); `override`/`onMismatch` changed |
+  | MINOR | additions: scopes, handlers, containers (derived too), `dependsOn`/`consumes` entries. Regenerating adds bindings members - implementations must be extended, the compiler lists what |
+  | PATCH | no generated signature or behaviour changes: descriptions, `privacy`, examples |
+
+  In `0.y.z` (semver's initial development) MAJOR changes need a minor bump, the rest a patch.
+
+  ```kotlin
+  eventThreadCodegen {
+      baseline = layout.projectDirectory.file("event-thread/scopes.baseline.json")
+  }
+  ```
+
+  Keep the baseline outside resources (it would be packaged) and refresh it at each release; the
+  classification is written to `build/reports/eventThread/compatibility.txt`.
+
+Generated code records both: every file's header names the plugin, schema `version` and `format`
+it came from, and a generated `ScopesSchema` object (`.scopes`) carries `VERSION`/`FORMAT` for a
+runtime check or log line.
+
+## Reports
+
+Next to the generated code, in `build/reports/eventThread`:
+
+- `scopes.md` - the event flow as a Mermaid diagram: per scope its events, containers, cascades,
+  reads and derived state; routing (`consumes`) and `dependsOn` between scopes.
+- `tasks/<Scope>.md` - what an implementation must provide: every container and handler binding
+  with its event, state, reads and the schema's examples, and the contract that checks it. A
+  checklist for a developer; a self-contained brief for an AI agent ("implement
+  `tasks/Work.md`").
+- `scopes.schema.json` - the format's JSON Schema, for offline editor setup.
 
 ## Schema checks
 
@@ -242,7 +277,10 @@ Before generating, the schema is verified as a whole - every problem reported at
 - every `consumes` names an event the scope handles;
 - every cascaded event reaches a handler - in its own scope, or in a scope that `consumes` it;
 - names don't collide: containers (one state spelled two ways), handler bases (`name` resolves
-  it), defined events/types, generated files.
+  it), defined events/types, generated files;
+- **cascade loops** (an event cascading, through its own or consuming scopes, back to itself) are
+  warnings - a loop guarded by the implementation's own condition is legitimate. With
+  `strictSchema = true` warnings fail the build too.
 
 Runtime behaviour - what an implementation actually does - is yours; the declared structure and
 flow can't drift from the schema.

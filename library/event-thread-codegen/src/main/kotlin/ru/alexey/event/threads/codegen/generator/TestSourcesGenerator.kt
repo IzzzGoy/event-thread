@@ -86,24 +86,58 @@ class TestSourcesGenerator(private val packageName: String) {
                     .build()
             )
             .addFunction(handlersRegistered(context, scope, newScope))
+            .addFunction(eventFlow(context, scope, newScope))
             .addFunction(relationsRegistered(context, scope, n, hasParams))
             .addFunctions(scope.handlers.flatMap { examples(context, scope, it, hasParams) })
             .build()
 
         return FileSpec.builder(n.pkg, "${n.base}ScopeContract")
-            .addFileComment(GENERATED)
+            .generatedBy(context)
             .addType(type)
             .build()
     }
 
+    /** Each event has as many handlers registered on the live scope as the schema declares. */
     private fun handlersRegistered(context: GeneratorContext, scope: ScopeModel, newScope: CodeBlock): FunSpec {
-        val events = scope.handlers.map { context.types.eventType(it.input) }.distinct()
+        val counts = scope.handlers.groupingBy { context.types.eventType(it.input) }.eachCount()
         return test("handlersAreRegistered")
             .addStatement("val scope = %L", newScope)
-            .addStatement("val handled = scope.metadata.eventsMetadata.keys")
+            .addStatement("val handled = scope.metadata.eventsMetadata")
             .apply {
-                events.forEach {
-                    addStatement("%M(%T::class.simpleName in handled, %S)", ASSERT_TRUE, it, "no handler registered for ${it.simpleName}")
+                counts.forEach { (event, n) ->
+                    addStatement(
+                        "%M(%L, handled[%T::class.simpleName]?.actions?.size ?: 0, %S)",
+                        ASSERT_EQUALS, n, event, "handlers registered for ${event.simpleName}",
+                    )
+                }
+            }
+            .addStatement("scope.close()")
+            .build()
+    }
+
+    /**
+     * The live scope's event flow - from its registration metadata, as event-thread-test's graph
+     * tools read it - is the schema's: per event exactly the declared cascades, each reachable.
+     */
+    private fun eventFlow(context: GeneratorContext, scope: ScopeModel, newScope: CodeBlock): FunSpec {
+        val produced = scope.handlers.groupBy { context.types.eventType(it.input) }.mapValues { (_, hs) ->
+            hs.mapNotNull { (it.output as? HandlerOutput.Event)?.event?.let(context.types::eventType) }.distinct()
+        }
+        return test("eventFlowMatchesSchema")
+            .addStatement("val scope = %L", newScope)
+            .addStatement("val events = scope.metadata.eventsMetadata")
+            .addStatement("val graph = scope.metadata.%M(%S)", TO_EVENT_GRAPH, scope.name)
+            .apply {
+                produced.forEach { (event, outputs) ->
+                    addStatement(
+                        "%M(setOf<String>(%L), events[%T::class.simpleName]?.producedTypes.orEmpty(), %S)",
+                        ASSERT_EQUALS, outputs.map { CodeBlock.of("%S", it.simpleName) }.joinToCode(", "), event,
+                        "events ${event.simpleName} cascades into",
+                    )
+                    if (outputs.isNotEmpty()) addStatement(
+                        "graph.%M(%S, %S, %L)", ASSERT_REACHES, scope.name, event.simpleName,
+                        outputs.map { CodeBlock.of("%S", it.simpleName) }.joinToCode(", "),
+                    )
                 }
             }
             .addStatement("scope.close()")
@@ -249,7 +283,7 @@ class TestSourcesGenerator(private val packageName: String) {
             .build()
 
         return FileSpec.builder(n.pkg, "${n.base}ScopeProbe")
-            .addFileComment(GENERATED)
+            .generatedBy(context)
             .addType(type)
             .build()
     }
@@ -273,5 +307,7 @@ class TestSourcesGenerator(private val packageName: String) {
         val FLOW_RESOURCE = MemberName("ru.alexey.event.threads.resources", "flowResource")
         val SCOPE_HOLDER = MemberName("ru.alexey.event.threads.scopeholder", "scopeHolder")
         val TYPED_SCOPE_PROBE = ClassName("ru.alexey.event.threads.test.typed", "TypedScopeProbe")
+        val TO_EVENT_GRAPH = MemberName("ru.alexey.event.threads.test.graph", "toEventGraph")
+        val ASSERT_REACHES = MemberName("ru.alexey.event.threads.test.graph", "assertReaches")
     }
 }

@@ -95,6 +95,13 @@ jobs:
       - name: Run sample tests
         run: ./gradlew :composeApp:testDebugUnitTest --no-configuration-cache
 
+      # The same suites on the iOS simulator (Kotlin/Native) - the runner is macOS already. The
+      # sample's commonTest includes the generated contracts, so this also runs them natively.
+      - name: Run iOS simulator tests
+        run: |
+          ./gradlew -p library iosSimulatorArm64Test
+          ./gradlew :composeApp:iosSimulatorArm64Test --no-configuration-cache
+
       - name: Publish
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.value }}

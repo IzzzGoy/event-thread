@@ -1,0 +1,393 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
+    "title": "event-thread scopes (format 1.0)",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/ScopeDocument"
+        },
+        {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/ScopeModel"
+            }
+        }
+    ],
+    "$defs": {
+        "ArgDef": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "created"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "fields": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/ArgDef"
+                            }
+                        },
+                        "field": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "name"
+                    ],
+                    "additionalProperties": false
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "generics"
+                        },
+                        "baseClassName": {
+                            "type": "string"
+                        },
+                        "parameters": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/ArgDef"
+                            }
+                        },
+                        "field": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "baseClassName"
+                    ],
+                    "additionalProperties": false
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "primitive"
+                        },
+                        "value": {
+                            "type": "string"
+                        },
+                        "typeKey": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "value",
+                        "typeKey"
+                    ],
+                    "additionalProperties": false
+                }
+            ]
+        },
+        "DerivedModel": {
+            "type": "object",
+            "properties": {
+                "state": {
+                    "$ref": "#/$defs/ArgDef"
+                },
+                "from": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ArgDef"
+                    }
+                }
+            },
+            "required": [
+                "state",
+                "from"
+            ],
+            "additionalProperties": false
+        },
+        "EventModel": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ArgDef"
+                    }
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
+        },
+        "ExampleModel": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "given": {
+                    "anyOf": [
+                        {},
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "reads": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "event": {
+                    "anyOf": [
+                        {},
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "expect": {
+                    "anyOf": [
+                        {},
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "emits": {
+                    "anyOf": [
+                        {
+                            "type": "array",
+                            "items": {}
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "HandlerModel": {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "$ref": "#/$defs/EventModel"
+                },
+                "output": {
+                    "$ref": "#/$defs/HandlerOutput"
+                },
+                "privacy": {
+                    "enum": [
+                        "private",
+                        "public"
+                    ]
+                },
+                "override": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "reads": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ArgDef"
+                    }
+                },
+                "examples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ExampleModel"
+                    }
+                }
+            },
+            "required": [
+                "input"
+            ],
+            "additionalProperties": false
+        },
+        "HandlerOutput": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "data"
+                        },
+                        "type": {
+                            "$ref": "#/$defs/ArgDef"
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "type"
+                    ],
+                    "additionalProperties": false
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "event"
+                        },
+                        "event": {
+                            "$ref": "#/$defs/EventModel"
+                        },
+                        "onMismatch": {
+                            "enum": [
+                                "Strict",
+                                "Warning",
+                                "Silent"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "event"
+                    ],
+                    "additionalProperties": false
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "const": "none"
+                        }
+                    },
+                    "required": [
+                        "kind"
+                    ],
+                    "additionalProperties": false
+                }
+            ]
+        },
+        "ScopeDocument": {
+            "type": "object",
+            "properties": {
+                "$schema": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "format": {
+                    "type": "string"
+                },
+                "version": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/ScopeModel"
+                    }
+                }
+            },
+            "required": [
+                "scopes"
+            ],
+            "additionalProperties": false
+        },
+        "ScopeModel": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "description": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "handlers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/HandlerModel"
+                    }
+                },
+                "params": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/ArgDef"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "dependsOn": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consumes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "derived": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/DerivedModel"
+                    }
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
+        }
+    }
+}

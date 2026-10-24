@@ -253,7 +253,7 @@ class ScopeHolderTypedTest {
 
         assertContains(error.message.orEmpty(), "[NeedsBinding]")
         assertNull(holder.find(StatsKey))
-        assertTrue(holder.activeMetadata.isEmpty())
+        assertTrue(holder.activeInstances.isEmpty())
         holder.close()
     }
 }

@@ -180,4 +180,32 @@ class ConfigSourceTest {
 
         assertContains(result.output, "has no schema source")
     }
+
+    @Test
+    fun reportsAreWrittenNextToTheGeneratedCode() {
+        buildScript("source<ResourceConfigSource>()")
+        spec("src/main/resources/event-thread/scopes.json", "Todo")
+
+        runner().build()
+
+        val reports = projectDir.resolve("build/reports/eventThread")
+        assertTrue(reports.resolve("scopes.md").readText().contains("```mermaid"))
+        assertTrue(reports.resolve("scopes.schema.json").isFile)
+        assertTrue(reports.resolve("tasks/Todo.md").readText().contains("# Todo - implementation tasks"))
+    }
+
+    @Test
+    fun checkFailsWhenTheVersionIsntBumpedForABreakingChange() {
+        buildScript("""source<ResourceConfigSource>(); baseline = layout.projectDirectory.file("baseline.json")""", plugins = "base")
+        projectDir.resolve("baseline.json").writeText("""{ "version": "1.0.0", "scopes": [{ "name": "Todo" }, { "name": "Gone" }] }""")
+        val schema = projectDir.resolve("src/main/resources/event-thread/scopes.json").apply { parentFile.mkdirs() }
+
+        schema.writeText("""{ "version": "1.1.0", "scopes": [{ "name": "Todo" }] }""")
+        val failed = runner().withArguments("check", "--configuration-cache").buildAndFail()
+        assertContains(failed.output, "need a major version bump from 1.0.0 (at least 2.0.0)")
+        assertContains(failed.output, "scope 'Gone' removed")
+
+        schema.writeText("""{ "version": "2.0.0", "scopes": [{ "name": "Todo" }] }""")
+        runner().withArguments("check", "--configuration-cache").build()
+    }
 }

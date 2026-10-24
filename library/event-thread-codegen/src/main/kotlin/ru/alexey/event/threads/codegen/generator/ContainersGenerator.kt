@@ -47,6 +47,6 @@ class ContainersGenerator(private val packageName: String) {
                 type.addProperty(PropertySpec.builder(it.property, it.className, KModifier.PROTECTED).initializer("deps.%N", it.property).build())
             }
         }
-        FileSpec.builder(container.className).addFileComment(GENERATED).addType(type.build()).build()
+        FileSpec.builder(container.className).generatedBy(context).addType(type.build()).build()
     }
 }

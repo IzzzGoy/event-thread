@@ -4,6 +4,7 @@ import org.gradle.api.file.ProjectLayout
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.ProviderFactory
+import ru.alexey.event.threads.codegen.model.ScopeDocument
 import ru.alexey.event.threads.codegen.model.ScopeModel
 import ru.alexey.event.threads.codegen.model.ScopeSpecFormat
 import java.io.File
@@ -32,7 +33,9 @@ abstract class ResourceConfigSource @Inject constructor(
         path.convention(DEFAULT_PATH)
     }
 
-    override fun schema(context: ConfigSourceContext): Provider<List<ScopeModel>> {
+    override fun schema(context: ConfigSourceContext): Provider<List<ScopeModel>> = document(context).map { it.scopes }
+
+    override fun document(context: ConfigSourceContext): Provider<ScopeDocument> {
         // fileContents, not readText(): the configuration cache records the read, so editing the
         // file invalidates a cached configuration instead of replaying the old schema. Checked
         // here rather than via `orElse(<throwing provider>)` - Gradle evaluates an orElse fallback
@@ -41,7 +44,7 @@ abstract class ResourceConfigSource @Inject constructor(
             val file = locate(context, relative)
             check(file.isFile) { "No event-thread schema at $file (`path` of ResourceConfigSource)" }
             providers.fileContents(layout.projectDirectory.file(file.absolutePath)).asText
-        }.map(ScopeSpecFormat::decode)
+        }.map(ScopeSpecFormat::decodeDocument)
     }
 
     /** The first resource root that has [relative]; if none does, the first root's would-be

@@ -25,6 +25,9 @@ data class ScopeMetadata(
     val name: String,
     val description: String,
     val events: List<EventInfo>,
+    /** The instance's typed params (`toString()`), when it has any - telling apart several live
+     * instances of one scope. */
+    val params: String? = null,
 )
 
 @Serializable
@@ -44,7 +47,7 @@ data class ConsumedMetadata(
  * configuration and its currently active scopes' metadata.
  *
  * Despite the name, this currently returns the same result as [generateActiveSchema]: both read
- * per-scope metadata from [ScopeHolder.activeMetadata], which only covers scopes that are
+ * per-scope metadata from [ScopeHolder.activeInstances], which only covers scopes that are
  * actually loaded. A true "static" schema - covering every scope declared in the
  * [ru.alexey.event.threads.scopeholder.ScopeHolderBuilder], loaded or not - isn't implemented
  * yet, since producing one would mean instantiating every declared scope just to introspect it.
@@ -57,23 +60,12 @@ fun ScopeHolder.generateStaticSchema(): ScopeHolderMetadata {
         consumedMetadata = external.map { (k, v) ->
             ConsumedMetadata(k.simpleName.orEmpty(), v)
         },
-        scopesMetadata = activeMetadata.map { (scope, metadata) ->
-            ScopeMetadata(
-                name = scope,
-                description = metadata.description,
-                events = metadata.eventsMetadata.map { (event, metadata) ->
-                    EventInfo(
-                        name = event,
-                        info = metadata,
-                    )
-                }
-            )
-        }
+        scopesMetadata = activeInstances.map { it.toMetadata() }
     )
 }
 
 /** Builds a [ScopeHolderMetadata] snapshot of this holder's declared `dependsOn`/`consume`
- * configuration and its currently active scopes' metadata (see [ScopeHolder.activeMetadata]). */
+ * configuration and its currently active scopes' metadata (see [ScopeHolder.activeInstances]). */
 fun ScopeHolder.generateActiveSchema(): ScopeHolderMetadata {
     return ScopeHolderMetadata(
         externalDependencies = dependencies.map { (scope, deps) ->
@@ -82,17 +74,13 @@ fun ScopeHolder.generateActiveSchema(): ScopeHolderMetadata {
         consumedMetadata = external.map { (k, v) ->
             ConsumedMetadata(k.simpleName.orEmpty(), v)
         },
-        scopesMetadata = activeMetadata.map { (scope, metadata) ->
-            ScopeMetadata(
-                name = scope,
-                description = metadata.description,
-                events = metadata.eventsMetadata.map { (event, metadata) ->
-                    EventInfo(
-                        name = event,
-                        info = metadata,
-                    )
-                }
-            )
-        }
+        scopesMetadata = activeInstances.map { it.toMetadata() }
     )
 }
+
+private fun ActiveScopeInfo.toMetadata() = ScopeMetadata(
+    name = key,
+    description = metadata.description,
+    events = metadata.eventsMetadata.map { (event, info) -> EventInfo(name = event, info = info) },
+    params = params.takeIf { it != Unit }?.toString(),
+)

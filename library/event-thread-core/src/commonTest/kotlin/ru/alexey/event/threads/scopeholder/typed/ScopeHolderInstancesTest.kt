@@ -11,6 +11,7 @@ import kotlinx.coroutines.withTimeout
 import ru.alexey.event.threads.bus.StrictEvent
 import ru.alexey.event.threads.di.DependencyProvider
 import ru.alexey.event.threads.resources.flowResource
+import ru.alexey.event.threads.scopeholder.generateActiveSchema
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -137,6 +138,18 @@ class ScopeHolderInstancesTest {
         assertSame(homeList, holder.find(ListKey))
         homeList + Put(1)
         assertEquals(1, awaitReal { homeList.resolveOrThrow<Int>("total").first { it == 1 } })
+        holder.close()
+    }
+
+    @Test
+    fun activeInstancesListEveryInstanceWithItsParams() {
+        val holder = holder()
+        holder.load(ListKey, work)
+        holder.load(ListKey, home)
+
+        assertEquals(setOf<Any>(work, home), holder.activeInstances.filter { it.key == "List" }.map { it.params }.toSet())
+        assertEquals(setOf("ListParams(name=work)", "ListParams(name=home)"),
+            holder.generateActiveSchema().scopesMetadata.mapNotNull { it.params }.toSet())
         holder.close()
     }
 

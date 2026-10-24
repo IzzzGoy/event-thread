@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 (unreleased)
+## 1.2.0
 
 ### Added
 - **Generated test support** (`event-thread-codegen`, into the test source set; `generateTests`):
@@ -11,6 +11,36 @@
   - `<Name>ScopeProbe` - typed access to a scope's containers for behaviour tests, on the new
     `TypedScopeProbe` (`event-thread-test`: `send`, `await`, `awaitEmitted`, `emitted`).
 - `EventHandler.EventCascader.preview(input)` - the events a cascader would emit, without a bus.
+- **Versioned schemas**: object root `{ "$schema", "format", "version", "scopes" }` (the 1.1 bare
+  array still reads). `format` = schema-language version (newer than the plugin fails with "update
+  the plugin"); `version` = semver of your contract.
+- **Compatibility check** `checkScopesCompatibility` (part of `check`, with `baseline`): classifies
+  changes as MAJOR/MINOR/PATCH and fails on an insufficient version bump.
+- Generated files are stamped with plugin/schema/format versions; generated `ScopesSchema` object.
+- **JSON Schema** of the format (`event-thread-codegen/scopes.schema.json`, derived from the parser's
+  serializers) for editors and AI agents.
+- **Reports** in `build/reports/eventThread`: Mermaid event-flow diagram (`scopes.md`), per-scope
+  implementation task files (`tasks/<Scope>.md`).
+- Cascade-loop detection (warnings; `strictSchema` makes them errors).
+- `ScopeHolder.activeInstances` - one entry per live scope instance, with its params. Holder
+  metadata snapshots include instance params.
+
+- `ConfigSource.document(context)` - open, defaults to wrapping `schema`, so custom sources keep
+  working; the built-in file/URL sources return the whole versioned document through it.
+- Generated contract test `eventFlowMatchesSchema`: the live scope's event flow (via
+  `event-thread-test`'s event graph) is exactly the schema's; `handlersAreRegistered` now checks the
+  number of handlers per event.
+- `TypedScopeProbe` records into a `ScenarioRecorder`: `probe.scenario { expectEvents(...) }`.
+- Generated files carry `@file:Suppress("unused", "RedundantVisibilityModifier")`.
+- `TESTING.md` (event-thread-codegen): what generated test support runs and checks.
+
+### Fixed
+- Event bus metadata listed only the first handler of an event: with several (`thread<E>()` twice,
+  or several typed handlers), the others' actions and outputs were missing - and so from the
+  event-graph tooling.
+
+### Deprecated
+- `ScopeHolder.activeMetadata` - one entry per key, losing instances; use `activeInstances`.
 
 ## 1.1.0
 

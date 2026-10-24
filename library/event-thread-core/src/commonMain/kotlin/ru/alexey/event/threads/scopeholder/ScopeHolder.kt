@@ -25,6 +25,14 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.reflect.KClass
 
+/** A live scope instance: its [key], the typed [params] it was loaded with (`Unit` for an
+ * untyped/DSL load), and its [metadata]. See [ScopeHolder.activeInstances]. */
+data class ActiveScopeInfo(
+    val key: String,
+    val params: Any,
+    val metadata: ru.alexey.event.threads.ScopeMetadata,
+)
+
 internal class ExternalEventDefinition(
     val key: String,
     val event: Event
@@ -79,6 +87,15 @@ class ScopeHolder(
     // to its now-closed Scope.
     private val routingJobsRef = AtomicReference<Map<Scope, Job>>(emptyMap())
 
+    /** One entry per live scope instance - a key loaded with several params values appears once
+     * per instance. */
+    val activeInstances: List<ActiveScopeInfo>
+        get() = entries.map { ActiveScopeInfo(it.scope.key, it.instance, it.scope.metadata) }
+
+    @Deprecated(
+        "One entry per key: with several live instances of a key (typed params) only one shows. Use activeInstances.",
+        ReplaceWith("activeInstances"),
+    )
     val activeMetadata
         get() = active.associate { it.key to it.metadata }
 

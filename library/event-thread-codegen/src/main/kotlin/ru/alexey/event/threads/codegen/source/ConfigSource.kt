@@ -1,6 +1,7 @@
 package ru.alexey.event.threads.codegen.source
 
 import org.gradle.api.provider.Provider
+import ru.alexey.event.threads.codegen.model.ScopeDocument
 import ru.alexey.event.threads.codegen.model.ScopeModel
 
 /**
@@ -18,4 +19,9 @@ import ru.alexey.event.threads.codegen.model.ScopeModel
  */
 abstract class ConfigSource {
     abstract fun schema(context: ConfigSourceContext): Provider<List<ScopeModel>>
+
+    /** The whole schema document - scopes plus its `format`/`version` (see [ScopeDocument]).
+     * Override in a source that reads one; the default wraps [schema], unversioned. */
+    open fun document(context: ConfigSourceContext): Provider<ScopeDocument> =
+        schema(context).map { ScopeDocument(scopes = it) }
 }
