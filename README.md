@@ -56,6 +56,14 @@ commonTest {
 }
 ```
 
+Typed scopes can be generated from a JSON schema by the Gradle plugin (§12):
+
+```kotlin
+plugins {
+    id("io.github.izzzgoy.event-thread.codegen") version "$event_thread_version"
+}
+```
+
 `event-thread-network` wraps [ktor-client](https://ktor.io) HTTP calls and WebSocket connections.
 There's no `Resource`/`unwrap()` wrapper for HTTP - `HttpClient.getBody`/`postBody`/`putBody`/
 `deleteBody` are plain suspend functions returning `T` directly, meant to be called wherever a
@@ -494,6 +502,73 @@ worth knowing about how this stays deterministic:
 
 ***
 
+### 11. Typed scopes
+
+An alternative to the DSL for scopes you want as solid, compile-time-checked classes
+(`ru.alexey.event.threads.scopeholder.typed`). Usually generated (§12), but plain Kotlin:
+
+```kotlin
+data class ListParams(val cacheKey: String)
+object WorkKey : ScopeKey<ListParams> { override val identity = "Work" }
+
+class TodosContainer : DatacontainerTyped<List<Todo>>() {             // a container is a class
+    override val source = flowResource(emptyList<Todo>())
+}
+class AddTodo(todos: TodosContainer) : EventHandler.StateProcessor<AddTodoEvent, List<Todo>>(todos) {
+    override suspend fun process(event: AddTodoEvent, state: List<Todo>) = state + Todo(event.text)
+}
+
+class WorkScope(params: ListParams, provider: DependencyProvider) :
+    ScopeTyped<ListParams>(WorkKey, params, dependencyProvider = provider) {
+    override fun ScopeWiring.wire() {
+        val todos = TodosContainer()
+        container("todos", todos)
+        on(AddTodo(todos))                    // or handler<E, Base>(deps): resolved from the provider
+    }
+}
+
+val holder = scopeHolder {
+    scopeTyped(WorkKey, ::WorkScope)          // next to DSL scopes, dependsOn/consume work as usual
+}
+holder.load(WorkKey, ListParams("work"))      // each params value is its own instance
+```
+
+- Handlers: `StateProcessor` (updates its container), `EventCascader` (returns events; declares
+  `outputs`, enforced like `output<T>()`), `SideEffect`. Several per event run in order.
+- `ContainerSnapshot` (`container.snapshot().map { }`) gives a handler read-only access to
+  another container's state.
+- Instances: `load`/`find`/`free(key, params)` address one instance; `find(key)` without params
+  is the key's only instance. `implements` doesn't apply to typed scopes.
+
+### 12. Generating typed scopes
+
+`event-thread-codegen` generates the typed scopes' structure - keys, scopes with their wiring,
+container and handler bases, `dependsOn`/`consume` relations - from a schema (`scopes.json` in
+resources, the build script, or a URL); you implement the logic and bind it in your
+`DependencyProvider`:
+
+```kotlin
+eventThreadCodegen {
+    packageName = "com.example.app"
+    source<ResourceConfigSource> { path = "event-thread/scopes.json" }
+}
+
+scopeHolder {
+    dependencyProvider(koin.asDependencyProvider())
+    registerWorkScope()
+}
+```
+
+Each scope's containers and handlers form a generated `<Name>ScopeBindings` interface - implement
+it and the compiler checks nothing is missing, or bind them in a DependencyProvider
+(`registerWorkScope()`). The schema's event flow is verified at generation (e.g. a cascaded event
+no scope handles or consumes fails the build).
+
+Schema reference, generated layout and binding conventions:
+[library/event-thread-codegen/README.md](library/event-thread-codegen/README.md). The sample app
+ships its whole scope graph both ways - DSL in `TodoApp.kt`, typed in `typed/` +
+`resources/event-thread/scopes.json` (switch with `USE_TYPED_SCOPES` in `App.kt`).
+
 ## Common scenarios
 
 Quick "I want to do X" → "use Y" pointers into the walkthrough above.
@@ -514,6 +589,8 @@ Quick "I want to do X" → "use Y" pointers into the walkthrough above.
 - **A supporting scope that should just always be around.** `dependsOn` (§5) ties a background
   scope's lifecycle to whatever scope Compose actually mounts, so it loads/frees automatically
   without a composable needing to know it exists (`TodoDomain` again - it depends on `TodoTabs`).
+- **Scopes as compile-time-checked classes, generated from a schema.** Typed scopes (§11) via
+  `event-thread-codegen` (§12) - the app's whole DSL graph has a typed twin in the sample.
 - **Push/pop navigation with typed parameters per screen.** `navGraph`/`NavigationDestination`
   (§7); each destination is itself an event, so navigating is just dispatching one.
 - **A small piece of UI (a counter, a badge) reused across several screens** without re-wiring
@@ -529,3 +606,14 @@ Quick "I want to do X" → "use Y" pointers into the walkthrough above.
   scope(name) { expectEvents(...); expectState(...) } }` for "what actually happened" in one
   deterministic run.
 
+## Building this repository
+
+- `library/` is the published build (every `io.github.izzzgoy:event-thread-*` module, plus
+  `convention-plugins/`); the repo root is the sample app, which includes `library` as a
+  composite build - its dependencies and the codegen plugin come from source.
+- Sample: `./gradlew :composeApp:testDebugUnitTest`, or run it from the IDE / Xcode as usual.
+- Library: `./gradlew -p library jvmTest :event-thread-codegen:test`.
+- Publishing (CI on a `v*` tag, see `.github/workflows/publish.yml`):
+  `./gradlew -p library publishToMavenCentral -PreleaseVersion=<version> --no-configuration-cache`.
+  Publication is only configured when `library` is the root build (`-p library`); as an included
+  build it's left out entirely.

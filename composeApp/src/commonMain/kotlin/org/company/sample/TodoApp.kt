@@ -73,6 +73,7 @@ import ru.alexey.event.threads.resources.resolveOrDefault
 import ru.alexey.event.threads.resources.resource
 import ru.alexey.event.threads.resources.valueResource
 import ru.alexey.event.threads.scope
+import ru.alexey.event.threads.scopeholder.ScopeHolderBuilder
 import ru.alexey.event.threads.scopeholder.scopeHolder
 import ru.alexey.event.threads.scopeholder.typed.ScopeKey
 import ru.alexey.event.threads.scopeholder.typed.by
@@ -298,6 +299,12 @@ fun provideTodoScopeHolder() = scopeHolder {
         todoDraftFragment, todoDraftBody,
     )
 
+    todoNavigation()
+}
+
+/** The "Navigation" graph (list -> edit screen) - shared by [provideTodoScopeHolder] and the
+ * typed holder (`typed/TodoScopes.kt`); its screens are private to this file. */
+internal fun ScopeHolderBuilder.todoNavigation() {
     navGraph<TodoDestination>("Navigation", TodoListDestination) {
         TodoListDestination::class bind {
             content { TodoListScreen() }
