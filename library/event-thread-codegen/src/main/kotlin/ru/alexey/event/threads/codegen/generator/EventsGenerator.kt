@@ -3,6 +3,7 @@ package ru.alexey.event.threads.codegen.generator
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.LIST
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.SET
@@ -14,6 +15,7 @@ import ru.alexey.event.threads.OutputMismatchBehavior
 import ru.alexey.event.threads.Privacy
 import ru.alexey.event.threads.codegen.model.HandlerOutput
 import ru.alexey.event.threads.codegen.model.ScopeModel
+import ru.alexey.event.threads.codegen.rules.CompiledRule
 import kotlin.reflect.KClass
 
 /**
@@ -31,9 +33,46 @@ class EventsGenerator(private val packageName: String) {
         context.handlers.groupBy { it.event.simpleName }.map { (event, handlers) ->
             FileSpec.builder(context.packages.events, "${event}Handler")
                 .generatedBy(context)
-                .apply { handlers.forEach { addType(base(context, it)) } }
+                .apply {
+                    handlers.forEach { handler ->
+                        addType(base(context, handler))
+                        context.rules[handler]?.let { addType(rule(context, handler, it)) }
+                    }
+                }
                 .build()
         }
+
+    /**
+     * `<Name>Rule`: the schema rule compiled into an implementation of the base - the bindings'
+     * default. Its KDoc is the rule as written, so a Kotlin type error in it points back to the
+     * schema.
+     */
+    private fun rule(context: GeneratorContext, handler: GeneratorContext.Handler, compiled: CompiledRule): TypeSpec {
+        val hasDeps = handler.ownState != null || handler.reads.isNotEmpty()
+        val params = context.ruleParams(handler)
+        val constructor = FunSpec.constructorBuilder()
+        if (hasDeps) constructor.addParameter("deps", handler.className.nestedClass("Deps"))
+        params?.let { constructor.addParameter("params", it) }
+        val builder = TypeSpec.classBuilder(handler.ruleClassName)
+            .addKdoc("Generated from the schema rule of [%N]:\n```\n%L\n```", handler.className.simpleName, handler.rule!!)
+            .primaryConstructor(constructor.build())
+            .superclass(handler.className)
+        if (hasDeps) builder.addSuperclassConstructorParameter("deps")
+        params?.let { builder.addProperty(PropertySpec.builder("params", it, KModifier.PRIVATE).initializer("params").build()) }
+        val function = when (val output = handler.output) {
+            is HandlerOutput.Data -> FunSpec.builder("process")
+                .addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE, KModifier.SUSPEND)
+                .addParameter("event", handler.event)
+                .addParameter("state", context.container(output.type).state)
+                .returns(context.container(output.type).state)
+            is HandlerOutput.Event -> FunSpec.builder("cascade")
+                .addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE)
+                .addParameter("input", handler.event)
+                .returns(LIST.parameterizedBy(CoreSymbols.Event))
+            HandlerOutput.None -> error("A side effect has no rule")
+        }
+        return builder.addFunction(function.addCode(compiled.body).build()).build()
+    }
 
     private fun base(context: GeneratorContext, handler: GeneratorContext.Handler): TypeSpec {
         val own = handler.ownState?.let(context::container)

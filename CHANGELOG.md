@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+- **Handler rules** (`event-thread-codegen`, schema format 1.1): a handler's `rule` is its
+  behaviour in a small pipeline language - `"state | remove where it.id == event.id"`,
+  `"when totalAdded >= 5 emit AddLimitReached(totalAdded)"`. Names: `event`, `state` (or the
+  container's name), `reads` containers, `params`, `it`; literals, lists, field access,
+  construction, `with (...)` copies, arithmetic/comparison/logic, `?:`, `if/then/else`; stages
+  `where`, `remove where`, `select`, `update where ... set (...)`, `count`, `any`/`all`/`none`,
+  `sum`, `first`/`last`, `sortBy`/`sortByDescending`/`sorted`, `distinct`, `take`/`drop`;
+  cascading `[when cond] emit Event(...)` clauses.
+  - Compiled to a generated `<Handler>Rule` class, the bindings member's **default**: the
+    DependencyProvider adapter uses a bound implementation if there is one, else the rule; a
+    hand-written bindings class can override it.
+  - Checked at generation (syntax with the column, names, types the schema knows, shape, a
+    cascading rule's declared output); value types by the Kotlin compiler.
+  - Task reports mark ruled handlers as done; the compatibility check treats a rule added as
+    MINOR, changed as PATCH, removed as MAJOR.
+  - Rules need `"format": "1.1"` - so an older plugin asks to be updated instead of ignoring them.
+- **Container `initial` values** (schema format 1.1): `"initial": { "showCompleted": "true",
+  "title": "params.name" }` per scope - rule-language expressions over `params` and literals.
+  Generates `<State>ContainerInitial(initial)` and makes it the container binding's default
+  (overridable like rules). Checked: only handler-written containers, no `event`/`state`.
+- **Typed scope access**: generated scopes expose a property per container as its own class
+  (`workScope.todos: TodosContainer`) and `send(event)` per handled event; `ScopeTyped.typedContainer`.
+- **Compose entry points** (`generateCompose`, default on with the Kotlin Compose compiler plugin;
+  adds `event-thread-compose`): `<Name>ScopeContent(params) { ... }` mounts the scope and runs its
+  content on the typed scope; `current<Name>Scope()`. Built on new `typedScope` /
+  `currentTypedScope` in `event-thread-compose`.
+- Rules: single-quoted strings (`'Work'`); a warning for rules over 120 characters.
+- RULES.md (event-thread-codegen): the complete rule language reference.
+- `DependencyProviderBindings.resolveOrNull`; `EventBus.received`.
+- SCHEMA_GUIDE.md (event-thread-codegen): how to write a schema, for developers and AI agents.
+
+### Fixed
+- `TypedScopeProbe`'s scenario trace was in processing-completion order, so a cascaded event that
+  finished before its cause came first and `scenario { expectEvents("A", "B") }` was flaky. It's
+  recorded in receipt order now - causal - from the new `EventBus.received` flow (emitted as the
+  bus takes each event in, before any handler; never suspends the bus).
+
+### Changed
+- Schema format 1.1 (`ScopeFormat.CURRENT`); 1.0 documents read unchanged.
+- Sample app: nine handlers (toggle, delete, rename, show-completed, the add limit, tallies,
+  tab and draft selection) are schema rules and three containers schema `initial`s now, checked by
+  the existing examples; the typed app's tab row uses the generated `TodoTabsScopeContent`.
+
 ## 1.2.0
 
 ### Added

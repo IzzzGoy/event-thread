@@ -33,6 +33,16 @@ version as the plugin) to that source set's `api`. Opt out with `addCoreDependen
 pick another core version with `coreVersion = "..."`. Generation runs before compilation; run it
 alone with `./gradlew generateTypedScopes`.
 
+| Option | Default | |
+| --- | --- | --- |
+| `packageName` | - (required) | root package of the generated code |
+| `source<T> { }` | - (required) | where the schema comes from (below) |
+| `addCoreDependency` / `coreVersion` | `true` / the plugin's version | adds `event-thread-core` (and, with `generateCompose`, `event-thread-compose`) |
+| `generateCompose` | `true` if the Kotlin Compose compiler plugin is applied | `<Name>ScopeContent { }` / `current<Name>Scope()` composables |
+| `generateTests` | `true` | contracts and probes in the test source set ([TESTING.md](TESTING.md)) |
+| `strictSchema` | `false` | schema warnings (cascade loops, long rules) fail the build |
+| `baseline` | unset | the released schema, for `checkScopesCompatibility` |
+
 ### Schema sources
 
 Exactly one, chosen with `source<T> { }`:
@@ -54,7 +64,7 @@ A versioned document:
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
-  "format": "1.0",
+  "format": "1.1",
   "version": "1.0.0",
   "scopes": [ ... ]
 }
@@ -62,8 +72,8 @@ A versioned document:
 
 `$schema` points editors at [`scopes.schema.json`](scopes.schema.json) (completion, inline
 errors - also what an AI agent should validate against); `format` and `version` are explained in
-[Versioning](#versioning). A bare array of scopes (the 1.1 format) still reads, as format 1.0
-without a version.
+[Versioning](#versioning). Format 1.1 adds handler `rule`s; 1.0 documents read unchanged. A bare
+array of scopes (the oldest shape) still reads, without a version.
 
 A scope:
 
@@ -101,6 +111,7 @@ A scope:
 | `consumes` | Events routed here when *another* scope dispatches them (by handler input name - the scope must handle it) |
 | `derived` | Containers computed from others of this scope (`state` from `from`, in order) instead of written by a handler |
 | `handlers` | See below. Several per event are fine; they run in declaration order |
+| `initial` | Per container (by name): its initial state as a rule-language expression (format 1.1) - the container binding's default, see [RULES.md](RULES.md#initial-values) |
 
 ### Handler
 
@@ -111,6 +122,8 @@ A scope:
 | `reads` | Containers it reads but doesn't update, by state type → a read-only `ContainerSnapshot` |
 | `name` | Base class name. Default `<Event><Kind>` (`AddTodoStateProcessor`); needed only when two handlers would collide |
 | `privacy`, `override` | Registration metadata, as `thread<T> { privacy(...); override(...) }` |
+| `rule` | Its behaviour in the rule language (format 1.1) - `"state \| remove where it.id == event.id"`, `"when totalAdded >= 5 emit AddLimitReached(totalAdded)"`. Generates `<Handler>Rule`, the binding's default; see [Rules](#rules) |
+| `examples` | Input → output examples, generated as tests ([TESTING.md](TESTING.md)) |
 
 ### Types (`ArgDef`)
 
@@ -131,18 +144,90 @@ Under the configured `packageName`:
 
 | Package | Contents |
 | --- | --- |
-| `.scopes` | `<Name>ScopeKey : ScopeKey<P>`; `<Name>ScopeBindings` (one factory per container and handler) and `<Name>ScopeDependencyBindings` (it, from a DependencyProvider); `<Name>Scope` with its `wire()`; `<Name>ScopeFragment` (dependsOn/consumes); `ScopeHolderBuilder.register<Name>Scope()` / `register<Name>Scope(bindings)` |
-| `.events` | Abstract handler bases, one `<Event>Handler.kt` per input event; each with a nested `Deps` (its container + snapshots) |
-| `.containers` | Abstract `<State>Container`s; a derived one has `Deps` with its source containers |
+| `.scopes` | `<Name>ScopeKey : ScopeKey<P>`; with `generateCompose`, `<Name>ScopeContent(params) { }` and `current<Name>Scope()`; `<Name>ScopeBindings` (one factory per container and handler) and `<Name>ScopeDependencyBindings` (it, from a DependencyProvider); `<Name>Scope` with its `wire()`; `<Name>ScopeFragment` (dependsOn/consumes); `ScopeHolderBuilder.register<Name>Scope()` / `register<Name>Scope(bindings)` |
+| `.events` | Abstract handler bases, one `<Event>Handler.kt` per input event; each with a nested `Deps` (its container + snapshots); a `<Handler>Rule` implementation for each handler with a `rule` |
+| `.containers` | Abstract `<State>Container`s; a derived one has `Deps` with its source containers; `<State>ContainerInitial` for containers with an `initial` |
 | `.models` | Events and `created` types the schema defines |
 
 Containers and handler bases are shared by every scope using the same state / the same handler -
 two scopes with identical handlers get one set of bases.
 
+## Rules
+
+A handler whose behaviour is a plain function of its event, its state, its `reads` and the
+scope's `params` can be written in the schema instead of in code:
+
+```text
+{ "input": DeleteTodo,   "output": data todos, "rule": "state | remove where it.id == event.id" }
+{ "input": ToggleTodo,   "output": data todos, "rule": "state | update where it.id == event.id set (done: not it.done)" }
+{ "input": AddTodo,      "output": event AddLimitReached, "reads": [totalAdded],
+  "rule": "when totalAdded >= 5 emit AddLimitReached(totalAdded)" }
+```
+
+It's compiled to Kotlin at generation:
+
+```kotlin
+public class DeleteTodoStateProcessorRule(deps: DeleteTodoStateProcessor.Deps) : DeleteTodoStateProcessor(deps) {
+  protected override suspend fun process(event: DeleteTodo, state: List<Todo>): List<Todo> = state.filterNot { it.id == event.id }
+}
+```
+
+and becomes the binding's default - `fun deleteTodoStateProcessor(deps) = DeleteTodoStateProcessorRule(deps)`
+in `<Name>ScopeBindings`. The default is overridable: `<Name>ScopeDependencyBindings` prefers an
+implementation bound in the DependencyProvider, and a hand-written bindings class can override
+the member. Names, stages and shape are checked at generation (with the column of the problem);
+types by the Kotlin compiler on the generated class. Schema examples test whichever
+implementation is in use.
+
+Containers get the same treatment through a scope's `initial` - their starting state as an
+expression over `params` and literals:
+
+```text
+"initial": { "showCompleted": "true", "limitHits": "0", "selectedList": "'Work'" }
+```
+
+generates `ShowCompletedContainerInitial(true)` (a container on `flowResource(true)`) as the
+binding's default - again overridable by a bound implementation (persistent state, a specific
+dispatcher, `onEach` logging).
+
+The full language - names (`event`, `state`, reads, `params`, `it`), operators, pipeline stages
+(`where`, `select`, `update ... set`, `count`, `any`, `sum`, `sortBy`, ...), cascading clauses,
+initial values, the checks, a cookbook and the grammar - is in [RULES.md](RULES.md).
+
+## Using a scope from code and Compose
+
+Each generated scope is typed all the way to the call site:
+
+- a property per container, as its own class - `workScope.todos: TodosContainer` (a `StateFlow`);
+- `send(event)` for each event the scope handles - sending one it doesn't handle doesn't compile.
+
+With `generateCompose` (on by default when the Kotlin Compose compiler plugin is applied; adds
+`event-thread-compose`), each scope also gets Compose entry points:
+
+```kotlin
+@Composable
+fun TodoTabs() = TodoTabsScopeContent {                 // mounts TodoTabs while in composition
+    val selected by selectedList.collectAsState()     // SelectedListContainer
+    Tab(selected = selected == "Work", onClick = { send(SelectList("Work")) }, text = { Text("Work") })
+}
+
+@Composable
+fun DraftField() {
+    val scope = currentTodoDraftScope()               // the enclosing TodoDraftScope
+    val text by scope.draft.collectAsState()          // DraftContainer
+    TextField(text, onValueChange = { scope.send(SetDraftText(it)) })
+}
+```
+
+`<Name>ScopeContent(params) { }` loads, counts and frees the scope instance exactly like
+`scope(key, params) { }` (it's built on it) - the content just runs on the typed scope instead of
+looking containers up with `resolveOrThrow<T>()`. The holder must register the scope with its
+generated `register<Name>Scope()`; a DSL-registered scope under the same key fails with a hint.
+
 ## Your side: implementations and bindings
 
 Every container and handler a scope needs is a member of its generated `<Name>ScopeBindings`
-interface. Supply them one of two ways:
+interface - abstract, unless a schema rule provides its default. Supply them one of two ways:
 
 **Implement the interface** - completeness checked by the compiler: a container or handler added
 to the schema is a new member, and the build fails until its implementation is written.
@@ -193,7 +278,8 @@ Binding conventions:
   main-thread bus, or a logging watcher); otherwise a default one.
 - **Containers** take an optional `coroutineScope` for their pipeline:
   `TotalImpl : TotalContainer(CoroutineScope(Dispatchers.Main + SupervisorJob()))`.
-- With the DependencyProvider path, a missing binding fails the scope's first load.
+- With the DependencyProvider path, a missing binding fails the scope's first load - except for a
+  handler with a rule, where it means "use the rule".
 
 ## Testing
 
@@ -220,6 +306,10 @@ Examples are written per handler in the schema:
 `given`/`expect` for state handlers, `reads` + `emits` for cascading ones; values are JSON turned
 into Kotlin at generation (no `@Serializable` needed - constructor parameter names must match the
 keys). Keep examples to deterministic handlers.
+
+**[SCHEMA_GUIDE.md](SCHEMA_GUIDE.md)** - how to design and write a schema: workflow, every
+enforced rule with its error, conventions, recipes, anti-patterns, versioning, and a strict
+procedure for AI agents.
 
 **[TESTING.md](TESTING.md)** describes exactly what runs when, what each test checks and doesn't,
 and how the probe behaves.
@@ -290,3 +380,7 @@ flow can't drift from the schema.
 - Navigation graphs, emitters and scope-template inheritance (`implements`) stay in the DSL - a
   holder can mix both (`registerWorkScope()` next to `navGraph(...)`).
 - Initial state isn't in the schema - container bindings supply `source`.
+- Typed Compose entry points cover scopes and their containers; navigation graphs and widgets
+  stay on the DSL's `NavGraph`/`widget`.
+- Rules are expressions over the schema's values - no I/O, randomness, time or calls into your
+  code; such handlers stay hand-written.

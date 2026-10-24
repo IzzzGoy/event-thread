@@ -35,6 +35,10 @@ abstract class GenerateTypedScopesTask : DefaultTask() {
     @get:Input
     abstract val generateTests: Property<Boolean>
 
+    /** Also `<Name>ScopeContent` composables (event-thread-compose). */
+    @get:Input
+    abstract val generateCompose: Property<Boolean>
+
     /** Schema warnings (e.g. cascade loops) fail generation instead of being logged. */
     @get:Input
     abstract val strictSchema: Property<Boolean>
@@ -60,7 +64,7 @@ abstract class GenerateTypedScopesTask : DefaultTask() {
 
         val version = generatorVersion.get()
         val dir = fresh(outputDirectory.get().asFile)
-        TypedScopeSources.writeTo(dir, packageName.get(), document, version)
+        TypedScopeSources.writeTo(dir, packageName.get(), document, version, compose = generateCompose.get())
 
         val testDir = fresh(testOutputDirectory.get().asFile)
         if (generateTests.get()) TypedScopeSources.writeTestsTo(testDir, packageName.get(), document, version)

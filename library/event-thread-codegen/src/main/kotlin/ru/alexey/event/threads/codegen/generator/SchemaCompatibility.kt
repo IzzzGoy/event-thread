@@ -72,6 +72,17 @@ object SchemaCompatibility {
         (oldDerived.keys intersect newDerived.keys).filter { oldDerived[it] != newDerived[it] }
             .forEach { out += Change(Level.MAJOR, "$s derived ${label(it)} computed from other containers") }
 
+        (a.initial.keys + b.initial.keys).distinct().forEach { name ->
+            val x = a.initial[name]
+            val y = b.initial[name]
+            when {
+                x == y -> Unit
+                x == null -> out += Change(Level.MINOR, "$s initial $name added")
+                y == null -> out += Change(Level.MAJOR, "$s initial $name removed - bindings relying on its default no longer compile")
+                else -> out += Change(Level.PATCH, "$s initial $name changed")
+            }
+        }
+
         val oldHandlers = a.handlers.associateBy(::handlerKey)
         val newHandlers = b.handlers.associateBy(::handlerKey)
         (oldHandlers.keys - newHandlers.keys).forEach { out += Change(Level.MAJOR, "$s handler $it removed") }
@@ -86,6 +97,14 @@ object SchemaCompatibility {
             if (x.override != y.override) out += Change(Level.MAJOR, "$h: override changed")
             if (x.privacy != y.privacy) out += Change(Level.PATCH, "$h: privacy changed")
             if (x.examples != y.examples) out += Change(Level.PATCH, "$h: examples changed")
+            // A rule is the binding's default: gaining one is a feature, losing one makes every
+            // binding that relied on it abstract again.
+            when {
+                x.rule == y.rule -> Unit
+                x.rule == null -> out += Change(Level.MINOR, "$h: rule added")
+                y.rule == null -> out += Change(Level.MAJOR, "$h: rule removed - bindings relying on its default no longer compile")
+                else -> out += Change(Level.PATCH, "$h: rule changed")
+            }
         }
         return out
     }

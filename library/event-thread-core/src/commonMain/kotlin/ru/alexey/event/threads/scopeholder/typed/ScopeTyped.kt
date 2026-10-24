@@ -90,6 +90,17 @@ abstract class ScopeTyped<P : Any>(
     final override fun <T : Any> get(clazz: KClass<T>, name: String?): Datacontainer<T>? =
         wiring.containers.get(clazz, name)
 
+    /**
+     * The container registered in [wire] under [name], as its own class - what generated scopes
+     * expose as typed properties (`workScope.todos: TodosContainer`). Wires the scope on first
+     * use, like every other way in.
+     */
+    protected fun <C : Datacontainer<*>> typedContainer(name: String): C {
+        val container = checkNotNull(wiring.named[name]) { "Scope '$key' has no container '$name'" }
+        @Suppress("UNCHECKED_CAST")
+        return container as C
+    }
+
     /** Closes every registered container and the bus. A scope that was never used has nothing to
      * close, so this doesn't wire it just to tear it down. */
     override fun close() {

@@ -36,8 +36,13 @@ class ScopeWiring internal constructor(
      * Register containers before the handlers using them. */
     inline fun <reified T : Any, C : Datacontainer<T>> container(name: String, container: C): C {
         containers.set(T::class, name, container)
+        named[name] = container
         return container
     }
+
+    /** Every registered container by name - what [ScopeTyped.typedContainer] reads. */
+    @PublishedApi
+    internal val named = mutableMapOf<String, Datacontainer<*>>()
 
     /**
      * Resolves the implementation of container [C] (a generated abstract container - the spec

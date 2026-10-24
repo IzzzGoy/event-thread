@@ -38,6 +38,11 @@ abstract class EventThreadCodegenExtension @Inject constructor(private val objec
      * `kotlin-test` to it. Default `true`. */
     abstract val generateTests: Property<Boolean>
 
+    /** Also generates Compose entry points per scope - `<Name>ScopeContent(params) { ... }` and
+     * `current<Name>Scope()` - and adds `event-thread-compose` (with `addCoreDependency`). Default
+     * `true` when the Kotlin Compose compiler plugin is applied, else `false`. */
+    abstract val generateCompose: Property<Boolean>
+
     /** Schema warnings (e.g. a cascade loop) fail the build instead of being logged. Default `false`. */
     abstract val strictSchema: Property<Boolean>
 

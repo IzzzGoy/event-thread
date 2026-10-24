@@ -24,9 +24,12 @@ class EventThreadCodegenPlugin : Plugin<Project> {
             addCoreDependency.convention(true)
             generateTests.convention(true)
             strictSchema.convention(false)
+            generateCompose.convention(false)
             coreVersion.convention(pluginVersion)
             selectedSource.finalizeValueOnRead()
         }
+
+        project.plugins.withId(COMPOSE_COMPILER_PLUGIN) { extension.generateCompose.convention(true) }
 
         // Filled once a Kotlin plugin shows up (below); sources only ever see it read-only.
         val resourceDirectories = project.objects.fileCollection()
@@ -48,6 +51,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
             task.outputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/kotlin"))
             task.generateTests.set(extension.generateTests)
             task.strictSchema.set(extension.strictSchema)
+            task.generateCompose.set(extension.generateCompose)
             task.generatorVersion.set(pluginVersion)
             task.testOutputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/test"))
             task.reportDirectory.set(project.layout.buildDirectory.dir("reports/eventThread"))
@@ -96,7 +100,11 @@ class EventThreadCodegenPlugin : Plugin<Project> {
                 project.configurations.named(sourceSet.apiConfigurationName) { api ->
                     api.dependencies.addAllLater(project.provider {
                         if (extension.addCoreDependency.get()) {
-                            listOf(project.dependencies.create("$CORE_COORDINATES:${extension.coreVersion.get()}"))
+                            listOfNotNull(
+                                project.dependencies.create("$CORE_COORDINATES:${extension.coreVersion.get()}"),
+                                project.dependencies.create("$COMPOSE_COORDINATES:${extension.coreVersion.get()}")
+                                    .takeIf { extension.generateCompose.get() },
+                            )
                         } else {
                             emptyList()
                         }
@@ -112,6 +120,8 @@ class EventThreadCodegenPlugin : Plugin<Project> {
 
         private const val CORE_COORDINATES = "io.github.izzzgoy:event-thread-core"
         private const val TEST_COORDINATES = "io.github.izzzgoy:event-thread-test"
+        private const val COMPOSE_COORDINATES = "io.github.izzzgoy:event-thread-compose"
+        private const val COMPOSE_COMPILER_PLUGIN = "org.jetbrains.kotlin.plugin.compose"
 
         private val TEST_SOURCE_SETS = mapOf("commonMain" to "commonTest", "main" to "test")
 

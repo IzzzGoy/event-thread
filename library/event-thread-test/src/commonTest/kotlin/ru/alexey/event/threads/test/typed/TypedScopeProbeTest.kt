@@ -1,5 +1,6 @@
 package ru.alexey.event.threads.test.typed
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import ru.alexey.event.threads.bus.Event
 import ru.alexey.event.threads.bus.StrictEvent
@@ -31,6 +32,20 @@ private class ProbeScope(val hits: Hits = Hits()) : ScopeTyped<Unit>(ProbeKey, U
         on(object : EventHandler.EventCascader<Ping>() {
             override val outputs: Set<KClass<out Event>> = setOf(Pong::class)
             override fun cascade(input: Ping): List<Event> = listOf(Pong(input.n * 10))
+        })
+    }
+}
+
+/** Ping's handlers stay busy after cascading - Pong is always *processed* first. */
+private class SlowScope(val hits: Hits = Hits()) : ScopeTyped<Unit>(ProbeKey, Unit) {
+    override fun ScopeWiring.wire() {
+        container("hits", hits)
+        on(object : EventHandler.EventCascader<Ping>() {
+            override val outputs: Set<KClass<out Event>> = setOf(Pong::class)
+            override fun cascade(input: Ping): List<Event> = listOf(Pong(input.n * 10))
+        })
+        on(object : EventHandler.SideEffect<Ping>() {
+            override suspend fun handle(event: Ping) = delay(300)
         })
     }
 }
@@ -75,6 +90,21 @@ class TypedScopeProbeTest {
             expectEvents("Ping", "Pong")
             expectState(probe.hits, 4)
         }
+        probe.close()
+    }
+
+    /** Regression: the scenario trace used to be processing order, so a cascade that finished
+     * before its cause came out first - `expectEvents("Ping", "Pong")` was flaky. */
+    @Test
+    fun scenarioOrderIsCausalEvenWhenTheCascadeFinishesFirst() = runTest {
+        val scope = SlowScope()
+        val probe = object : TypedScopeProbe(scope) {}
+
+        probe.send(Ping(1))
+        probe.awaitEmitted<Ping>()
+        // Processed: Pong first, Ping after its slow side effect.
+        assertEquals(listOf(Pong(10), Ping(1)), probe.emitted.value)
+        probe.scenario { expectEvents("Ping", "Pong") }
         probe.close()
     }
 }

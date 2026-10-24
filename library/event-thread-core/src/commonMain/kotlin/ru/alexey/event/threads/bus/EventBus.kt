@@ -104,6 +104,18 @@ class EventBus(
     private val _output = MutableSharedFlow<Event>(replay = 1)
     override val output = _output.asSharedFlow()
 
+    // Unbounded and never suspending: emitted from the reader loop, which must not wait on a
+    // collector. Nothing is buffered while nobody collects.
+    private val _received = MutableSharedFlow<Event>(extraBufferCapacity = Int.MAX_VALUE)
+
+    /**
+     * Every event this bus takes in, in the order it takes them - *before* any handler runs.
+     * Unlike [output] (emitted as each event's handlers finish, so a fast cascaded event can come
+     * out before the slower event that caused it), this order is causal: an event is always
+     * received before anything its handlers cascade. For tooling - test recorders, tracing.
+     */
+    val received: SharedFlow<Event> = _received.asSharedFlow()
+
     /** Per event type: its primary registration's metadata, with the actions (and declared
      * outputs) of every registration merged alongside it - several handlers for one event (several
      * `thread<E>()`s, or a typed scope's handlers for the same event) all show, in run order. */
@@ -235,6 +247,7 @@ class EventBus(
     init {
         coroutineScope.launch {
             for (event in channel) {
+                _received.tryEmit(event)
                 // One coroutine per event, not one per (watchers/dispatch/output) - dispatch of
                 // different events still runs concurrently (this launch doesn't block the loop
                 // from picking up the next event), but the three steps within a single event

@@ -38,11 +38,21 @@ class ScopeGenerator(private val packageName: String) {
      * One container or handler the scope needs - a member of its bindings interface. [deps]: the
      * `Deps` it's built from, if any; [build]: the `Deps(...)` construction for `wire()`.
      */
-    internal class Member(val name: String, val returns: ClassName, val deps: ClassName?, val build: CodeBlock?, val handles: ClassName?)
+    internal class Member(
+        val name: String,
+        val returns: ClassName,
+        val deps: ClassName?,
+        val build: CodeBlock?,
+        val handles: ClassName?,
+        /** `<Name>Rule(...)`: the default implementation, generated from the schema rule. */
+        val default: CodeBlock? = null,
+        val defaultClass: ClassName? = null,
+    )
 
     internal fun membersOf(context: GeneratorContext, scope: ScopeModel): List<Member> {
         val containers = context.containersOf(scope).map { c ->
             val from = c.from
+            val initial = context.initials[scope.name to c.property]
             Member(
                 name = c.property,
                 returns = c.className,
@@ -52,6 +62,8 @@ class ScopeGenerator(private val packageName: String) {
                         states.map { CodeBlock.of("%N", context.container(it).property) }.joinToCode(", "))
                 },
                 handles = null,
+                default = initial?.let { CodeBlock.of("%T(%L)", context.initialClass(c), it.body) },
+                defaultClass = context.initialClass(c).takeIf { initial != null },
             )
         }
         val handlers = scope.handlers.map(context::handlerOf).distinct().map { h ->
@@ -64,6 +76,11 @@ class ScopeGenerator(private val packageName: String) {
                 // joinToCode, not joinToString: a stringified CodeBlock loses its imports.
                 build = if (args.isEmpty()) null else CodeBlock.of("%T(%L)", h.className.nestedClass("Deps"), args.joinToCode(", ")),
                 handles = h.event,
+                default = context.rules[h]?.let {
+                    val ruleArgs = listOfNotNull("deps".takeIf { args.isNotEmpty() }, "params".takeIf { context.ruleParams(h) != null })
+                    CodeBlock.of("%T(%L)", h.ruleClassName, ruleArgs.joinToString(", "))
+                },
+                defaultClass = h.ruleClassName.takeIf { context.rules[h] != null },
             )
         }
         val members = containers + handlers
@@ -101,7 +118,20 @@ class ScopeGenerator(private val packageName: String) {
                 "Everything [%N] is built from: one factory per container and handler of the schema. Implement it\n" +
                     "directly, or use [%N] to resolve each from a DependencyProvider.", scopeClass.simpleName, adapterType.simpleName,
             )
-            .addFunctions(members.map { memberFun(it).addModifiers(KModifier.ABSTRACT).build() })
+            .addFunctions(members.map { m ->
+                val default = m.default
+                if (default == null) {
+                    memberFun(m).addModifiers(KModifier.ABSTRACT).build()
+                } else {
+                    memberFun(m)
+                        .addKdoc(
+                            "Default: [%T], generated from the schema's %L - override for an implementation of your own.",
+                            m.defaultClass!!, if (m.handles == null) "`initial`" else "rule",
+                        )
+                        .addStatement("return %L", default)
+                        .build()
+                }
+            })
             .addFunction(
                 FunSpec.builder("eventBus").returns(CoreSymbols.EventBus.copy(nullable = true))
                     .addKdoc("This scope's bus; `null` (default): one bound in the DependencyProvider under the scope's name, else a default bus.")
@@ -119,9 +149,12 @@ class ScopeGenerator(private val packageName: String) {
             .addSuperinterface(bindingsType)
             .addFunctions(members.map { m ->
                 val args = listOfNotNull(m.deps?.let { "deps" }, "params".takeIf { hasParams })
-                memberFun(m).addModifiers(KModifier.OVERRIDE)
-                    .addStatement("return resolve(%T::class%L)", m.returns, args.joinToString("") { ", $it" })
-                    .build()
+                val resolved = args.joinToString("") { ", $it" }
+                val call = memberFun(m).addModifiers(KModifier.OVERRIDE)
+                // A rule's default stays the fallback: one bound in the provider wins over it.
+                if (m.default == null) call.addStatement("return resolve(%T::class%L)", m.returns, resolved)
+                else call.addStatement("return resolveOrNull(%T::class%L) ?: super<%T>.%N(%L)", m.returns, resolved, bindingsType, m.name, args.joinToString(", "))
+                call.build()
             })
             .addFunction(
                 FunSpec.builder("eventBus").addModifiers(KModifier.OVERRIDE).returns(CoreSymbols.EventBus.copy(nullable = true))
@@ -162,6 +195,8 @@ class ScopeGenerator(private val packageName: String) {
             .addSuperclassConstructorParameter("eventBusFactory = { bindings.eventBus() }")
             .apply { scope.description?.let { addKdoc("%L", it) } }
             .addFunction(wire(members, hasParams))
+            .addProperties(typedContainers(context, scope))
+            .addFunctions(senders(context, scope))
             .build()
 
         val fragmentName = "${base}ScopeFragment"
@@ -223,6 +258,28 @@ class ScopeGenerator(private val packageName: String) {
             .build()
     }
 
+    /** One property per container, as its own class - `workScope.todos: TodosContainer`, a
+     * `StateFlow` for the UI (`todos.collectAsState()`). */
+    private fun typedContainers(context: GeneratorContext, scope: ScopeModel): List<PropertySpec> =
+        context.containersOf(scope).map { c ->
+            require(c.property !in RESERVED) {
+                "Scope '${scope.name}': container '${c.property}' would hide the scope's own member - rename its field"
+            }
+            PropertySpec.builder(c.property, c.className)
+                .getter(FunSpec.getterBuilder().addStatement("return typedContainer(%S)", c.property).build())
+                .build()
+        }
+
+    /** `send(event)` per event the scope handles - sending one it doesn't handle is a compile error. */
+    private fun senders(context: GeneratorContext, scope: ScopeModel): List<FunSpec> =
+        scope.handlers.map { context.types.eventType(it.input) }.distinct().map { event ->
+            FunSpec.builder("send")
+                .addKdoc("Dispatches [%T] into this scope.", event)
+                .addParameter("event", event)
+                .addStatement("plus(event)")
+                .build()
+        }
+
     /** Builds every member through `bindings`, in order - no lookups left here. */
     private fun wire(members: List<Member>, hasParams: Boolean): FunSpec {
         val body = CodeBlock.builder()
@@ -243,6 +300,12 @@ class ScopeGenerator(private val packageName: String) {
     }
 
     companion object {
+        /** Members of `ScopeTyped`/`Scope` a container property must not shadow. */
+        private val RESERVED = setOf(
+            "key", "scopeKey", "params", "description", "dependencyProvider", "eventBus", "metadata", "emitters",
+            "bindings", "close", "get", "resolve", "resolveOrThrow", "plus", "thread", "send", "wire", "typedContainer",
+        )
+
         /** `Todo` and `TodoScope` both become `TodoScope`. */
         fun className(scope: ScopeModel): String = "${baseName(scope)}Scope"
 

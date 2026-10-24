@@ -9,7 +9,7 @@ plugins {
 }
 
 // CI passes -PreleaseVersion=<tag without "v">; local builds keep the default.
-version = providers.gradleProperty("releaseVersion").getOrElse("1.2.0")
+version = providers.gradleProperty("releaseVersion").getOrElse("1.3.0")
 group = "io.github.izzzgoy"
 
 repositories {

@@ -564,6 +564,14 @@ it and the compiler checks nothing is missing, or bind them in a DependencyProvi
 (`registerWorkScope()`). The schema's event flow is verified at generation (e.g. a cascaded event
 no scope handles or consumes fails the build).
 
+Simple behaviour needs no code at all: a handler's `rule` -
+`"state | remove where it.id == event.id"`, `"when totalAdded >= 5 emit AddLimitReached(totalAdded)"` -
+and a container's `initial` (`"showCompleted": "true"`) compile to generated implementations that
+are the bindings' defaults; bind your own to replace any of them
+([RULES.md](library/event-thread-codegen/RULES.md)). Generated scopes are typed up to the UI:
+`workScope.todos: TodosContainer`, `send(...)` only for events the scope handles, and
+`WorkScopeContent(params) { val todos by todos.collectAsState() }` in Compose.
+
 Schemas are versioned (`format` of the schema language, semver `version` of your contract - a
 `baseline` makes `check` enforce the bump its changes need), validate in editors through a
 published JSON Schema, and come with an event-flow diagram and per-scope implementation task files
@@ -571,6 +579,10 @@ in `build/reports/eventThread`. Tests are generated too: a per-scope contract (e
 relations, and each schema `example` against your implementation) and a typed probe for your own
 behaviour tests.
 
+The rule language (handler `rule`s, container `initial`s):
+[library/event-thread-codegen/RULES.md](library/event-thread-codegen/RULES.md).
+Writing a schema (developers and AI agents):
+[library/event-thread-codegen/SCHEMA_GUIDE.md](library/event-thread-codegen/SCHEMA_GUIDE.md).
 What the generated test support runs and checks:
 [library/event-thread-codegen/TESTING.md](library/event-thread-codegen/TESTING.md).
 Schema reference, generated layout and binding conventions:

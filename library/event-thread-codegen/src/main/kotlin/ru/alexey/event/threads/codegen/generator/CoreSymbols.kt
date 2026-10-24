@@ -41,6 +41,9 @@ internal object CoreSymbols {
     val CoroutineScope: ClassName = kotlinx.coroutines.CoroutineScope::class.asClassName()
     val Dispatchers: ClassName = kotlinx.coroutines.Dispatchers::class.asClassName()
     val ScopeHolderBuilder: ClassName = CoreScopeHolderBuilder::class.asClassName()
+    val ObservableResource: ClassName = ru.alexey.event.threads.resources.ObservableResource::class.asClassName()
+    val flowResource = MemberName("ru.alexey.event.threads.resources", "flowResource")
+    val ScopeHolder: ClassName = ru.alexey.event.threads.scopeholder.ScopeHolder::class.asClassName()
 
     /** Top-level extension - no class to reference; the package still comes from one, so a
      * package move is caught. */

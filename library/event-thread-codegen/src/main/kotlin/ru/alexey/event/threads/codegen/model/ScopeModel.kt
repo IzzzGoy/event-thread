@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import ru.alexey.event.threads.OutputMismatchBehavior
 import ru.alexey.event.threads.Privacy
+import ru.alexey.event.threads.codegen.rules.RuleException
+import ru.alexey.event.threads.codegen.rules.RuleParser
 
 /**
  * Source-agnostic description of one scope to generate - what
@@ -34,6 +36,11 @@ data class ScopeModel(
     /** Containers computed from other containers of this scope (`transform`s) rather than
      * written by a handler - e.g. a filtered view of a list. */
     val derived: List<DerivedModel> = emptyList(),
+    /** Initial state per container (by container name), in the rule language - `"[]"`, `"true"`,
+     * `"'Work'"`, `"params.initialText"`. Generates the container binding's default (a
+     * `<State>ContainerInitial`); a binding of your own still overrides it. Not for derived
+     * containers - their state comes from `transforms`. */
+    val initial: Map<String, String> = emptyMap(),
 ) {
     init {
         requireIdentifier(name, "Scope name")
@@ -56,6 +63,13 @@ data class ScopeModel(
                 "Scope '$name': derived ${d.state.fieldName ?: d.state} is computed from $unknown - not a container declared before it"
             }
             known += d.state
+        }
+        initial.forEach { (container, rule) ->
+            try {
+                RuleParser.parse(rule)
+            } catch (e: RuleException) {
+                throw IllegalArgumentException("Scope '$name' initial $container: ${e.message}", e)
+            }
         }
         handlers.forEach { handler ->
             val unknown = handler.reads.filterNot { it in known }
@@ -91,9 +105,22 @@ data class HandlerModel(
     /** Input -> output examples, each generated as a test of the implementation (see
      * [ExampleModel]). Not for `none` outputs - a side effect has nothing to check. */
     val examples: List<ExampleModel> = emptyList(),
+    /** The handler's behaviour in the rule language (see SCHEMA_GUIDE.md, "Rules") - generates
+     * `<Name>Rule`, the bindings' default implementation; a binding of your own still overrides
+     * it. A state handler's rule is the new state (`state | where it.id != event.id`), a
+     * cascading one's the events (`when totalAdded >= 5 emit AddLimitReached(totalAdded)`). */
+    val rule: String? = null,
 ) {
     init {
         name?.let { requireIdentifier(it, "Handler name") }
+        rule?.let {
+            require(output != HandlerOutput.None) { "${input.name}: a side effect can't have a rule - it has no output to compute" }
+            try {
+                RuleParser.parse(it)
+            } catch (e: RuleException) {
+                throw IllegalArgumentException("${input.name} rule: ${e.message}", e)
+            }
+        }
         examples.forEachIndexed { i, example ->
             val label = "${input.name} example ${example.name ?: "#$i"}"
             when (output) {

@@ -15,7 +15,7 @@ data class SchemaReport(val errors: List<String>, val warnings: List<String>)
 object SchemaValidator {
 
     fun report(scopes: List<ScopeModel>): SchemaReport =
-        SchemaReport(errors = cascadesReachAHandler(scopes), warnings = cascadeCycles(scopes))
+        SchemaReport(errors = cascadesReachAHandler(scopes), warnings = cascadeCycles(scopes) + longRules(scopes))
 
     /** Throws on errors (and, with [strict], on warnings). */
     fun validate(scopes: List<ScopeModel>, strict: Boolean = false) {
@@ -50,6 +50,18 @@ object SchemaValidator {
             }
         }
     }
+
+    /** Rules are for one-liners; a long one is code without an IDE, a debugger or tests of its
+     * own - better written as an implementation. */
+    private fun longRules(scopes: List<ScopeModel>): List<String> = scopes.flatMap { scope ->
+        scope.handlers.mapNotNull { h ->
+            val rule = h.rule ?: return@mapNotNull null
+            if (rule.length <= MAX_RULE_LENGTH) null
+            else "'${scope.name}' ${h.name ?: h.input.simpleName}: rule is ${rule.length} characters (over $MAX_RULE_LENGTH) - consider writing it as code"
+        }
+    }
+
+    const val MAX_RULE_LENGTH = 120
 
     /**
      * Cascade loops: event E in scope S cascades F, which (in S, or routed to a consumer) cascades

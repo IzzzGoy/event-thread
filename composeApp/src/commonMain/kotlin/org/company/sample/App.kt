@@ -3,6 +3,7 @@ package org.company.sample
 import androidx.compose.runtime.Composable
 import org.company.sample.theme.AppTheme
 import ru.alexey.event.threads.ScopeHolder
+import org.company.sample.typed.TypedTodoTabsScreen
 import org.company.sample.typed.provideTypedTodoScopeHolder
 import ru.alexey.event.threads.scope
 
@@ -18,8 +19,12 @@ internal fun App() = AppTheme {
         // so a scope scoped to one screen's composition would be disposed on navigation.
         // TodoTabs dependsOn TodoDomain (see TodoApp.kt) - loading one loads the other,
         // no need to nest scope() calls here just to keep TodoDomain's EventBus alive.
-        scope(TodoTabs) {
-            TodoTabsScreen()
+        if (USE_TYPED_SCOPES) {
+            TypedTodoTabsScreen()          // the generated TodoTabsScopeContent { } mounts TodoTabs
+        } else {
+            scope(TodoTabs) {
+                TodoTabsScreen()
+            }
         }
     }
 }

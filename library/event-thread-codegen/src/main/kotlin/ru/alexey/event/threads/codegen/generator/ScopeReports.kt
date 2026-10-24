@@ -84,8 +84,13 @@ object ScopeReports {
         members.filter { it.handles == null }.forEach { m ->
             val c = context.containers.values.first { it.className == m.returns }
             val derivedFrom = c.from?.joinToString { context.container(it).property }
-            appendLine("- [ ] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`. " +
-                (if (derivedFrom != null) "Derived from $derivedFrom: supply `source` and `transforms` over them." else "Supply `source` - its initial state."))
+            val initial = scope.initial[m.name]
+            if (initial != null) {
+                appendLine("- [x] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`: generated from `initial` `$initial` (`${context.initialClass(c).simpleName}`); bind your own to replace it.")
+            } else {
+                appendLine("- [ ] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`. " +
+                    (if (derivedFrom != null) "Derived from $derivedFrom: supply `source` and `transforms` over them." else "Supply `source` - its initial state."))
+            }
         }
         appendLine()
         appendLine("## Handlers")
@@ -105,7 +110,13 @@ object ScopeReports {
             is HandlerOutput.Event -> "on `${short(h.input.name)}`, return the `${short(out.event.name)}` events to emit (or none) from `cascade(input)`"
             HandlerOutput.None -> "on `${short(h.input.name)}`, perform the side effect in `handle(event)`"
         }
-        append("- [ ] `${name.replaceFirstChar(Char::lowercaseChar)}` -> `$name`: $what.")
+        val rule = h.rule
+        if (rule != null) {
+            // Generated - nothing to write unless the default is to be replaced.
+            append("- [x] `${name.replaceFirstChar(Char::lowercaseChar)}` -> `$name`: generated from the rule `$rule` (`${handler.ruleClassName.simpleName}`); bind your own to replace it.")
+        } else {
+            append("- [ ] `${name.replaceFirstChar(Char::lowercaseChar)}` -> `$name`: $what.")
+        }
         if (h.reads.isNotEmpty()) append(" Reads ${h.reads.joinToString { "`${context.container(it).property}`" }} (snapshots).")
         if (h.input.args.isNotEmpty()) append(" Event args: ${h.input.args.joinToString { "`${it.fieldName}: ${context.types.typeOf(it)}`" }}.")
         h.examples.forEachIndexed { i, ex ->

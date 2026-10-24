@@ -25,6 +25,11 @@ abstract class DependencyProviderBindings(
         dependencyProvider.getOrNull(type, null, parametersOf(args))
             ?: error("Scope '$scopeIdentity': no implementation registered in its DependencyProvider for ${type.simpleName}")
 
+    /** [resolve], or `null` when nothing is bound - for a binding with a generated default (a
+     * schema rule), which applies only when the provider has no implementation of its own. */
+    protected fun <T : Any> resolveOrNull(type: KClass<T>, vararg args: Any): T? =
+        dependencyProvider.getOrNull(type, null, parametersOf(args))
+
     protected fun resolveEventBus(): EventBus? =
         dependencyProvider.getOrNull(EventBus::class, Qualifier.named(scopeIdentity))
 

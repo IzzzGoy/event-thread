@@ -23,9 +23,11 @@ object TypedScopeSources {
     fun generate(packageName: String, scopes: List<ScopeModel>): List<FileSpec> =
         generate(packageName, ScopeDocument(scopes = scopes))
 
-    fun generate(packageName: String, document: ScopeDocument, generatorVersion: String? = null): List<FileSpec> {
+    /** [compose]: also `<Name>ScopeContent` composables, see [ComposeGenerator]. */
+    fun generate(packageName: String, document: ScopeDocument, generatorVersion: String? = null, compose: Boolean = false): List<FileSpec> {
         val context = GeneratorContext(packageName, document.scopes, header(generatorVersion, document))
         val files = document.scopes.map { ScopeGenerator(packageName).generate(context, it) } +
+            (if (compose) document.scopes.map { ComposeGenerator().generate(context, it) } else emptyList()) +
             EventsGenerator(packageName).generate(context) +
             ContainersGenerator(packageName).generate(context) +
             ModelsGenerator(packageName).generate(context) +
@@ -62,8 +64,8 @@ object TypedScopeSources {
 
     /** Writes every generated file under [outputDirectory] (as a source root - package dirs are
      * created beneath it). */
-    fun writeTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null) {
-        generate(packageName, document, generatorVersion).forEach { it.writeTo(outputDirectory) }
+    fun writeTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null, compose: Boolean = false) {
+        generate(packageName, document, generatorVersion, compose).forEach { it.writeTo(outputDirectory) }
     }
 
     fun writeTestsTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null) {

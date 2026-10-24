@@ -12,7 +12,8 @@ import kotlinx.serialization.Serializable
  * - [version] - the semver of *your* contract. Compared against a baseline (the schema as last
  *   released), it must be bumped as the changes require - see the compatibility check.
  *
- * The 1.1 format - a bare array of scopes - still reads, as format 1.0 with no version.
+ * Formats: 1.0 - scopes, handlers, relations, examples; 1.1 - handler `rule`s, container `initial`s. The earliest
+ * shape - a bare array of scopes - still reads, as the current format with no version.
  */
 @Serializable
 data class ScopeDocument(
@@ -25,12 +26,18 @@ data class ScopeDocument(
     init {
         ScopeFormat.requireSupported(format)
         version?.let { SemVer.parse(it) }
+        // Declaring the format a feature needs is what makes an older plugin fail with "update"
+        // instead of not knowing the field.
+        val ruled = scopes.flatMap { s -> s.handlers.filter { it.rule != null }.map { "${s.name}.${it.input.simpleName}" } + s.initial.keys.map { "${s.name}.initial.$it" } }
+        require(ruled.isEmpty() || ScopeFormat.atLeast(format, "1.1")) {
+            "Handler rules and initial values need \"format\": \"1.1\" (this document is $format) - used by $ruled"
+        }
     }
 }
 
 /** The schema-language version this plugin speaks. */
 object ScopeFormat {
-    const val CURRENT = "1.0"
+    const val CURRENT = "1.1"
 
     /** URL of the JSON Schema for the current format, for a document's `$schema`. */
     const val SCHEMA_URL = "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json"
@@ -44,6 +51,12 @@ object ScopeFormat {
         require(minor <= currentMinor) {
             "Schema format $format is newer than this plugin understands ($CURRENT) - update event-thread-codegen"
         }
+    }
+
+    fun atLeast(format: String, required: String): Boolean {
+        val (major, minor) = parse(format)
+        val (rMajor, rMinor) = parse(required)
+        return major > rMajor || (major == rMajor && minor >= rMinor)
     }
 
     private fun parse(format: String): Pair<Int, Int> {

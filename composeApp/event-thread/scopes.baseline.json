@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
-  "format": "1.0",
-  "version": "1.0.0",
+  "format": "1.1",
+  "version": "1.1.0",
   "scopes": [
     {
       "name": "TodoDomain",
@@ -20,6 +20,7 @@
               "typeKey": "Int"
             }
           },
+          "rule": "state + 1",
           "examples": [
             {
               "name": "counts",
@@ -48,6 +49,7 @@
               "name": "org.company.sample.AddLimitReached"
             }
           },
+          "rule": "when totalAdded >= 5 emit AddLimitReached(totalAdded)",
           "examples": [
             {
               "name": "atLimitReports",
@@ -116,6 +118,10 @@
           ]
         }
       ],
+      "initial": {
+        "showCompleted": "true",
+        "limitHits": "0"
+      },
       "handlers": [
         {
           "input": {
@@ -156,6 +162,7 @@
               ]
             }
           },
+          "rule": "state | update where it.id == event.id set (done: not it.done)",
           "examples": [
             {
               "name": "marksDone",
@@ -208,6 +215,7 @@
               ]
             }
           },
+          "rule": "state | remove where it.id == event.id",
           "examples": [
             {
               "name": "removesOnlyThatTodo",
@@ -255,6 +263,7 @@
               ]
             }
           },
+          "rule": "todos | update where it.id == event.id set (text: event.text)",
           "examples": [
             {
               "name": "renames",
@@ -291,6 +300,7 @@
               "typeKey": "Boolean"
             }
           },
+          "rule": "event.show",
           "examples": [
             {
               "name": "hidesDone",
@@ -314,6 +324,7 @@
               "typeKey": "Int"
             }
           },
+          "rule": "limitHits + 1",
           "examples": [
             {
               "name": "countsWarnings",
@@ -374,6 +385,10 @@
           ]
         }
       ],
+      "initial": {
+        "showCompleted": "true",
+        "limitHits": "0"
+      },
       "handlers": [
         {
           "input": {
@@ -414,6 +429,7 @@
               ]
             }
           },
+          "rule": "state | update where it.id == event.id set (done: not it.done)",
           "examples": [
             {
               "name": "marksDone",
@@ -466,6 +482,7 @@
               ]
             }
           },
+          "rule": "state | remove where it.id == event.id",
           "examples": [
             {
               "name": "removesOnlyThatTodo",
@@ -513,6 +530,7 @@
               ]
             }
           },
+          "rule": "todos | update where it.id == event.id set (text: event.text)",
           "examples": [
             {
               "name": "renames",
@@ -549,6 +567,7 @@
               "typeKey": "Boolean"
             }
           },
+          "rule": "event.show",
           "examples": [
             {
               "name": "hidesDone",
@@ -572,6 +591,7 @@
               "typeKey": "Int"
             }
           },
+          "rule": "limitHits + 1",
           "examples": [
             {
               "name": "countsWarnings",
@@ -599,6 +619,9 @@
       "dependsOn": [
         "TodoDomain"
       ],
+      "initial": {
+        "selectedList": "'Work'"
+      },
       "handlers": [
         {
           "input": {
@@ -612,6 +635,7 @@
               "typeKey": "String"
             }
           },
+          "rule": "event.name",
           "examples": [
             {
               "name": "selects",
@@ -646,6 +670,7 @@
               "typeKey": "String"
             }
           },
+          "rule": "event.text",
           "examples": [
             {
               "name": "replacesText",

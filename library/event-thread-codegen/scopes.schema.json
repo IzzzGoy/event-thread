@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
-    "title": "event-thread scopes (format 1.0)",
+    "title": "event-thread scopes (format 1.1)",
     "oneOf": [
         {
             "$ref": "#/$defs/ScopeDocument"
@@ -233,6 +233,16 @@
                     "items": {
                         "$ref": "#/$defs/ExampleModel"
                     }
+                },
+                "rule": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
                 }
             },
             "required": [
@@ -381,6 +391,12 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/$defs/DerivedModel"
+                    }
+                },
+                "initial": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
                     }
                 }
             },

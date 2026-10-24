@@ -65,7 +65,9 @@ How an example test works, precisely:
 - The handler's own container and every container it `reads` are replaced by stubs - anonymous
   subclasses of the generated container classes holding the example's `given`/`reads` value.
   **Your container implementations are not used** (no sources, no I/O, no transforms).
-- The handler comes from `bindings()` with those stubs as its `Deps` (and `params()`).
+- The handler comes from `bindings()` with those stubs as its `Deps` (and `params()`) - for a
+  handler with a schema `rule`, that's the generated `<Handler>Rule` unless your bindings replace
+  it, so examples are the rule's tests.
 - No scope, no bus, no other handlers, no holder: one handler, called once.
 - State handler: `handler.handle(event)`, then the container's value is compared with `expect`.
 - Cascading handler: `handler.preview(event)` - the events it would emit, nothing dispatched -
@@ -75,9 +77,13 @@ How an example test works, precisely:
 ### What the contract does not check
 
 - Behaviour beyond the examples - a handler without examples is only checked to exist.
+  That holds for rules too: a rule compiles (names and types are checked), but what it computes
+  is only checked by its examples.
 - Container implementations: their initial state (`source`), derived containers' `transforms`,
   persistence - only that they can be constructed.
 - Side effects' effects.
+- Containers' `initial` defaults beyond being constructible - an example's `given` replaces the
+  initial state, so examples never see it.
 - Anything across scopes at runtime: `dependsOn` loading and `consumes` routing are only checked
   as *declared on the holder*, never exercised (no event is routed). `eventFlowMatchesSchema`
   covers one scope's own flow, not routing between scopes.
@@ -110,8 +116,8 @@ ready for any scope you want to test - an unused one costs nothing.
 | `<Name>ScopeProbe(params, bindings)` | Builds the scope from **your real bindings** (containers included - sources, I/O, transforms all real) and wires it immediately. |
 | `todos`, `visibleTodos`, ... | One property per container: the very instance the scope got from your bindings, typed - no lookups or casts. |
 | `send(event)` | Dispatches into the scope. |
-| `emitted` | `StateFlow<List<Event>>` - every event the scope processed since the probe was built: sent ones and everything they cascaded, in processing order. |
-| `recorder`, `scenario { }` | The same events in a `ScenarioRecorder`, for `event-thread-test`'s scenario DSL: `probe.scenario { expectEvents("AddTodo", "AddLimitReached"); expectState(probe.todos, "one todo") { it.size == 1 } }`. Await first - it reflects only what was processed so far. |
+| `emitted` | `StateFlow<List<Event>>` - every event the scope processed since the probe was built: sent ones and everything they cascaded, in the order their handlers *finished* - a cascaded event can come before its cause. For order, use `scenario { expectEvents(...) }`. |
+| `recorder`, `scenario { }` | The same events in a `ScenarioRecorder`, for `event-thread-test`'s scenario DSL: `probe.scenario { expectEvents("AddTodo", "AddLimitReached"); expectState(probe.todos, "one todo") { it.size == 1 } }`. Recorded in the order the scope *received* them - causal: an event always comes before what it cascades. Await first - it reflects only what was received so far. |
 | `await(state) { }` | Waits for a state to satisfy the predicate, returns it (default timeout 5 s). |
 | `awaitEmitted<E> { }` | Waits for a processed event of type `E` matching the predicate, returns it. |
 | `scope` | The live scope itself. |

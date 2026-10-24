@@ -36,17 +36,19 @@ abstract class TypedScopeProbe(val scope: Scope) : AutoCloseable {
     /** Every event the scope processed since the probe was built, in processing order. */
     val emitted: StateFlow<List<Event>> = recorded.asStateFlow()
 
-    /** The same events, recorded for the scenario DSL - see [scenario]. */
+    /** The same events for the scenario DSL - see [scenario] - in the order the scope *received*
+     * them: causal, an event always before what it cascades (processing order isn't - a cascaded
+     * event can finish first). Includes events received but still being processed. */
     val recorder = ScenarioRecorder()
 
     init {
         // UNDISPATCHED: subscribed before the constructor returns, so the first send is recorded.
         // (Touching eventBus also wires the scope.)
         collector.launch(start = CoroutineStart.UNDISPATCHED) {
-            scope.eventBus.output.collect { event ->
-                recorder.record(scope.key, event)
-                recorded.update { it + event }
-            }
+            scope.eventBus.output.collect { event -> recorded.update { it + event } }
+        }
+        collector.launch(start = CoroutineStart.UNDISPATCHED) {
+            scope.eventBus.received.collect { event -> recorder.record(scope.key, event) }
         }
     }
 

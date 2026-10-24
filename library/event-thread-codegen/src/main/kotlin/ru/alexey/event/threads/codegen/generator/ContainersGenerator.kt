@@ -17,6 +17,26 @@ import ru.alexey.event.threads.codegen.model.ScopeModel
  */
 class ContainersGenerator(private val packageName: String) {
 
+    /** `<State>ContainerInitial(initial)` - the container starting from a fixed value, what a
+     * schema `initial` makes the binding's default. Open: extend it for an `onEach`. */
+    private fun initial(context: GeneratorContext, container: GeneratorContext.Container, coroutineScope: ParameterSpec): TypeSpec =
+        TypeSpec.classBuilder(context.initialClass(container))
+            .addModifiers(KModifier.OPEN)
+            .addKdoc("[%T] starting from [initial] - generated for the schema's `initial`.", container.className)
+            .primaryConstructor(
+                FunSpec.constructorBuilder().addParameter("initial", container.state).addParameter(coroutineScope).build()
+            )
+            .addProperty(PropertySpec.builder("initial", container.state, KModifier.PRIVATE).initializer("initial").build())
+            .superclass(container.className)
+            .addSuperclassConstructorParameter("coroutineScope")
+            .addProperty(
+                PropertySpec.builder("source", CoreSymbols.ObservableResource.parameterizedBy(container.state), KModifier.PROTECTED, KModifier.OVERRIDE)
+                    .initializer("%M(initial)", CoreSymbols.flowResource)
+                    .build()
+            )
+            .build()
+
+
     fun generate(scopes: List<ScopeModel>): List<FileSpec> = generate(GeneratorContext(packageName, scopes))
 
     internal fun generate(context: GeneratorContext): List<FileSpec> = context.containers.values.map { container ->
@@ -47,6 +67,8 @@ class ContainersGenerator(private val packageName: String) {
                 type.addProperty(PropertySpec.builder(it.property, it.className, KModifier.PROTECTED).initializer("deps.%N", it.property).build())
             }
         }
-        FileSpec.builder(container.className).generatedBy(context).addType(type.build()).build()
+        val file = FileSpec.builder(container.className).generatedBy(context).addType(type.build())
+        if (context.hasInitial(container)) file.addType(initial(context, container, coroutineScope))
+        file.build()
     }
 }
