@@ -1,9 +1,21 @@
+import ru.alexey.event.threads.codegen.source.ResourceConfigSource
+
 plugins {
     alias(libs.plugins.multiplatform)
     alias(libs.plugins.compose)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.application)
     alias(libs.plugins.serialization)
+    id("io.github.izzzgoy.event-thread.codegen")
+}
+
+// Generates typed scopes (`<Name>ScopeKey`, `<Name>Scope` with its container and handler bases)
+// into commonMain (see build/generated/eventThread) from
+// src/commonMain/resources/event-thread/scopes.json, and adds event-thread-core to commonMain's api. Any ConfigSource works here - e.g.
+// `source<PlainConfigSource> { scopes { register("Todo") } }` to declare the schema in this file.
+eventThreadCodegen {
+    packageName = "org.company.sample"
+    source<ResourceConfigSource> { path = "event-thread/scopes.json" }
 }
 
 
@@ -25,11 +37,11 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":event-thread-core"))
-            implementation(project(":event-thread-cache"))
-            implementation(project(":event-thread-secure"))
-            implementation(project(":event-thread-compose"))
-            implementation(project(":event-thread-koin"))
+            implementation(libs.event.thread.core)
+            implementation(libs.event.thread.cache)
+            implementation(libs.event.thread.secure)
+            implementation(libs.event.thread.compose)
+            implementation(libs.event.thread.koin)
             implementation(compose.runtime)
             implementation(compose.material3)
             // material-icons-extended/-core are frozen at 1.7.3 by JetBrains (superseded by Material
@@ -49,7 +61,7 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation(project(":event-thread-test"))
+            implementation(libs.event.thread.test)
             implementation(libs.kotlinx.coroutines.test)
         }
 

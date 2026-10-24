@@ -1,0 +1,398 @@
+[
+  {
+    "name": "TodoDomain",
+    "description": "Business rules over todo events - reports its verdict back as events",
+    "handlers": [
+      {
+        "input": {
+          "name": "org.company.sample.AddTodo"
+        },
+        "name": "CountAddedTodos",
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "totalAdded",
+            "typeKey": "Int"
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.AddTodo"
+        },
+        "reads": [
+          {
+            "kind": "primitive",
+            "value": "totalAdded",
+            "typeKey": "Int"
+          }
+        ],
+        "output": {
+          "kind": "event",
+          "event": {
+            "name": "org.company.sample.AddLimitReached"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "Work",
+    "description": "The Work todo list (was: implements TodoListBase)",
+    "params": {
+      "kind": "primitive",
+      "value": "params",
+      "typeKey": "org.company.sample.TodoListBase.Params"
+    },
+    "consumes": [
+      "org.company.sample.AddLimitReached"
+    ],
+    "derived": [
+      {
+        "state": {
+          "kind": "primitive",
+          "value": "visibleTodos",
+          "typeKey": "org.company.sample.VisibleTodos"
+        },
+        "from": [
+          {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "value": "showCompleted",
+            "typeKey": "Boolean"
+          }
+        ]
+      }
+    ],
+    "handlers": [
+      {
+        "input": {
+          "name": "org.company.sample.AddTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.ToggleTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.DeleteTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.SaveTodoText"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.SetShowCompleted"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "showCompleted",
+            "typeKey": "Boolean"
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.AddLimitReached"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "limitHits",
+            "typeKey": "Int"
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "ru.alexey.event.threads.LifecycleEvents"
+        },
+        "output": {
+          "kind": "none"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Personal",
+    "description": "The Personal todo list (was: implements TodoListBase)",
+    "params": {
+      "kind": "primitive",
+      "value": "params",
+      "typeKey": "org.company.sample.TodoListBase.Params"
+    },
+    "consumes": [
+      "org.company.sample.AddLimitReached"
+    ],
+    "derived": [
+      {
+        "state": {
+          "kind": "primitive",
+          "value": "visibleTodos",
+          "typeKey": "org.company.sample.VisibleTodos"
+        },
+        "from": [
+          {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          },
+          {
+            "kind": "primitive",
+            "value": "showCompleted",
+            "typeKey": "Boolean"
+          }
+        ]
+      }
+    ],
+    "handlers": [
+      {
+        "input": {
+          "name": "org.company.sample.AddTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.ToggleTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.DeleteTodo"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.SaveTodoText"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "field": "todos",
+            "parameters": [
+              {
+                "kind": "primitive",
+                "value": "todo",
+                "typeKey": "org.company.sample.Todo"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.SetShowCompleted"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "showCompleted",
+            "typeKey": "Boolean"
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "org.company.sample.AddLimitReached"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "limitHits",
+            "typeKey": "Int"
+          }
+        }
+      },
+      {
+        "input": {
+          "name": "ru.alexey.event.threads.LifecycleEvents"
+        },
+        "output": {
+          "kind": "none"
+        }
+      }
+    ]
+  },
+  {
+    "name": "TodoTabs",
+    "description": "The selected list - app state, alive for the whole session",
+    "dependsOn": [
+      "TodoDomain"
+    ],
+    "handlers": [
+      {
+        "input": {
+          "name": "org.company.sample.SelectList"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "selectedList",
+            "typeKey": "String"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "TodoDraft",
+    "description": "Text of the todo being typed or edited",
+    "params": {
+      "kind": "primitive",
+      "value": "params",
+      "typeKey": "org.company.sample.TodoDraft.Params"
+    },
+    "handlers": [
+      {
+        "input": {
+          "name": "org.company.sample.SetDraftText"
+        },
+        "output": {
+          "kind": "data",
+          "type": {
+            "kind": "primitive",
+            "value": "draft",
+            "typeKey": "String"
+          }
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,151 @@
+package ru.alexey.event.threads.codegen.model
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import ru.alexey.event.threads.OutputMismatchBehavior
+import ru.alexey.event.threads.Privacy
+
+/**
+ * Source-agnostic description of one scope to generate - what
+ * [ru.alexey.event.threads.codegen.generator.ScopeGenerator] consumes. The Gradle DSL
+ * ([ru.alexey.event.threads.codegen.ScopeDeclaration]) is just one way to produce it; a JSON spec
+ * file (see [ScopeSpecFormat]) maps onto the same model without touching the generator.
+ *
+ * Validation lives in `init` blocks, so it runs for deserialized specs as well as hand-built ones.
+ */
+@Serializable
+data class ScopeModel(
+    /** Scope name as declared, e.g. `Todo` - becomes `AbstractTodoScope`. */
+    val name: String,
+    val description: String? = null,
+    val handlers: List<HandlerModel> = emptyList(),
+    /** Load-time params - the `P` of the generated `ScopeKey<P>`; absent means `Unit`. Prefer a
+     * [ArgDef.Created] with fields: it's generated as a `data class`, and structural equality is
+     * what lets params tell scope instances apart (a scope per list, per item). */
+    val params: ArgDef? = null,
+    /** Scopes loading this one also loads (`ScopeKey.extend { dependsOn(...) }`): a spec scope's
+     * name, or the qualified name of an existing `ScopeKey` object. A scope with params can't be
+     * depended on - dependsOn loads by key alone. */
+    val dependsOn: List<String> = emptyList(),
+    /** Events routed into this scope when another scope in the holder dispatches them
+     * (`consume<E>()`), by the name of the handler input that handles them here. */
+    val consumes: List<String> = emptyList(),
+    /** Containers computed from other containers of this scope (`transform`s) rather than
+     * written by a handler - e.g. a filtered view of a list. */
+    val derived: List<DerivedModel> = emptyList(),
+) {
+    init {
+        requireIdentifier(name, "Scope name")
+        // Several handlers per event are fine (they run in declaration order); several with the
+        // same generated name aren't - checked where names are resolved, in the generator.
+        dependsOn.forEach { requireTypeName(it, "Scope '$name' dependsOn") }
+        // A routed event with no handler here would arrive and do nothing - almost certainly a
+        // typo or a removed handler, never intended.
+        val handled = handlers.map { it.input.name }.toSet()
+        val unhandled = consumes.filterNot { it in handled }
+        require(unhandled.isEmpty()) { "Scope '$name' consumes $unhandled but has no handler for it" }
+        // A scope's containers are exactly its distinct `data` output states - a read naming
+        // anything else would generate a snapshot of a container that doesn't exist.
+        val written = handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type }.toSet()
+        val known = written.toMutableSet()
+        derived.forEach { d ->
+            require(d.state !in written) { "Scope '$name': ${d.state} is written by a handler, so it can't also be derived" }
+            val unknown = d.from.filterNot { it in known }
+            require(unknown.isEmpty()) {
+                "Scope '$name': derived ${d.state.fieldName ?: d.state} is computed from $unknown - not a container declared before it"
+            }
+            known += d.state
+        }
+        handlers.forEach { handler ->
+            val unknown = handler.reads.filterNot { it in known }
+            require(unknown.isEmpty()) {
+                "Scope '$name': ${handler.input.name} reads $unknown, which is no container of the scope"
+            }
+        }
+    }
+}
+
+/**
+ * One handler on a scope: reacts to [input] and produces [output]. Which
+ * `ru.alexey.event.threads.scopeholder.typed.EventHandler` variant it becomes follows from
+ * [output] - see [HandlerOutput].
+ *
+ * Only registration metadata that can't be derived lives here: the action type and the declared
+ * outputs follow from [output], the thread description from the generated handler's class name.
+ */
+@Serializable
+data class HandlerModel(
+    val input: EventModel,
+    val output: HandlerOutput = HandlerOutput.None,
+    /** `EventHandler.privacy` - informational, as `thread<T> { privacy(...) }`. */
+    val privacy: Privacy = Privacy.public,
+    /** `EventHandler.override` - replace, rather than join, another registration for [input]. */
+    val override: Boolean = false,
+    /** Generated base class name. Defaults to `<Event><Kind>` (`AddTodoStateProcessor`); needed
+     * only where two handlers would get the same default - several of one kind for one event. */
+    val name: String? = null,
+    /** Containers this handler reads but doesn't update, by state type (a `data` output type in
+     * the same scope) - each becomes a `ContainerSnapshot` in the generated base's `Deps`. */
+    val reads: List<ArgDef> = emptyList(),
+) {
+    init {
+        name?.let { requireIdentifier(it, "Handler name") }
+    }
+}
+
+/** A container whose [state] is computed from the containers holding [from] (each a state type
+ * declared in the same scope - written by a handler, or derived earlier). */
+@Serializable
+data class DerivedModel(
+    val state: ArgDef,
+    val from: List<ArgDef>,
+) {
+    init {
+        require(from.isNotEmpty()) { "Derived ${state.fieldName ?: state} needs at least one source" }
+    }
+}
+
+/**
+ * An event type. A simple [name] (`AddTodo`) is a definition: generated as a class implementing
+ * core's `Event`, one constructor property per [args] entry. A qualified [name]
+ * (`org.company.sample.AddTodo`) references an existing event class instead - its shape is its
+ * own, so it takes no [args].
+ */
+@Serializable
+data class EventModel(
+    val name: String,
+    val args: List<ArgDef> = emptyList(),
+) {
+    init {
+        requireTypeName(name, "Event name")
+        require(!isReference || args.isEmpty()) { "Event '$name' references an existing class - it can't declare args" }
+    }
+
+    val isReference: Boolean get() = '.' in name
+
+    val simpleName: String get() = name.substringAfterLast('.')
+}
+
+/** What a [HandlerModel] produces - and so which `EventHandler` variant it maps onto. */
+@Serializable
+sealed class HandlerOutput {
+
+    /** New state of type [type] -> `EventHandler.StateProcessor` over a `Datacontainer` of it. */
+    @Serializable
+    @SerialName("data")
+    data class Data(val type: ArgDef) : HandlerOutput()
+
+    /** Cascades [event] onto the bus -> `EventHandler.EventCascader`, with `outputs =
+     * setOf(<event>::class)`; [onMismatch] is what happens if it returns anything else. */
+    @Serializable
+    @SerialName("event")
+    data class Event(
+        val event: EventModel,
+        val onMismatch: OutputMismatchBehavior = OutputMismatchBehavior.Strict,
+    ) : HandlerOutput()
+
+    /** Nothing observable -> `EventHandler.SideEffect`. */
+    @Serializable
+    @SerialName("none")
+    data object None : HandlerOutput()
+}

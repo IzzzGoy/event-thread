@@ -82,8 +82,18 @@ jobs:
             true
           } >> "$GITHUB_ENV"
 
+      # The published modules live in their own build under library/ (the repo root is the sample
+      # app), so every library task runs with `-p library`. event-thread-codegen is a plain JVM
+      # module - its tests are `test`, not `jvmTest`.
       - name: Run JVM tests
-        run: ./gradlew jvmTest
+        run: ./gradlew -p library jvmTest :event-thread-codegen:test
+
+      # The sample consumes the library from source - including the codegen plugin generating its
+      # typed scopes from scopes.json - so this checks generated code compiles and runs against
+      # this exact release before anything is published. No configuration cache: no gain in a
+      # single run, and it keeps this build independent of the `-p library` one above.
+      - name: Run sample tests
+        run: ./gradlew :composeApp:testDebugUnitTest --no-configuration-cache
 
       - name: Publish
         env:
@@ -95,4 +105,4 @@ jobs:
           ARGS=()
           [ -n "$RELEASE_VERSION" ] && ARGS+=("-PreleaseVersion=$RELEASE_VERSION")
           # vanniktech's Central Portal upload doesn't support the configuration cache.
-          ./gradlew "$TASK" "${ARGS[@]}" --no-configuration-cache
+          ./gradlew -p library "$TASK" "${ARGS[@]}" --no-configuration-cache

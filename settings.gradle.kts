@@ -1,4 +1,6 @@
 pluginManagement {
+    // event-thread-codegen's Gradle plugin, built from source.
+    includeBuild("library")
     repositories {
         google()
         gradlePluginPortal()
@@ -22,12 +24,7 @@ plugins {
 }
 
 rootProject.name = "research"
-include("event-thread-core")
-include("event-thread-test")
-include("event-thread-cache")
-include("event-thread-secure")
-include("event-thread-compose")
-include("event-thread-network")
-include("event-thread-koin")
+
+// The library itself: `io.github.izzzgoy:event-thread-*` dependencies resolve to its projects.
+includeBuild("library")
 include("composeApp")
-includeBuild("convention-plugins")
