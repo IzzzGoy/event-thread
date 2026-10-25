@@ -11,7 +11,10 @@ import ru.alexey.event.threads.codegen.rules.RuleCompiler
 import ru.alexey.event.threads.codegen.rules.RuleEnvironment
 import ru.alexey.event.threads.codegen.rules.RuleException
 import ru.alexey.event.threads.codegen.rules.RuleParser
+import com.squareup.kotlinpoet.CodeBlock
 import ru.alexey.event.threads.codegen.model.ArgDef
+import ru.alexey.event.threads.codegen.model.EndpointModel
+import ru.alexey.event.threads.codegen.model.RemoteApiModel
 import ru.alexey.event.threads.codegen.model.HandlerModel
 import ru.alexey.event.threads.codegen.model.HandlerOutput
 import ru.alexey.event.threads.codegen.model.ScopeModel
@@ -21,13 +24,15 @@ import ru.alexey.event.threads.codegen.model.ScopeModel
  * - [scopes]: `<Name>ScopeKey` + `<Name>Scope`;
  * - [events]: handler bases, one `<Event>Handler.kt` per input event;
  * - [containers]: `<State>Container`s;
- * - [models]: defined events, created types, params.
+ * - [models]: defined events, created types, params;
+ * - [remote]: remote API interfaces and their Ktor implementations.
  */
 class GeneratedPackages(root: String) {
     val scopes = "$root.scopes"
     val events = "$root.events"
     val containers = "$root.containers"
     val models = "$root.models"
+    val remote = "$root.remote"
 }
 
 /**
@@ -43,6 +48,10 @@ internal class GeneratorContext(
     val scopes: List<ScopeModel>,
     /** File comment of every generated file - with the versions it was generated from. */
     val header: String = GENERATED,
+    /** The document's remote APIs. */
+    val remote: List<RemoteApiModel> = emptyList(),
+    /** Generate Ktor implementations of HTTP APIs (and default the bindings to them). */
+    val ktor: Boolean = true,
 ) {
 
     init {
@@ -67,7 +76,11 @@ internal class GeneratorContext(
         val rule: String? = null,
     ) {
         val ruleClassName: ClassName get() = ClassName(className.packageName, className.simpleName + "Rule")
+        /** A state processor's own state. */
         val ownState: ArgDef? get() = (output as? HandlerOutput.Data)?.type
+        /** The container it writes - its own state, or a request's `into`. */
+        val writes: ArgDef? get() = output.writes
+        val request: HandlerOutput.Request? get() = output as? HandlerOutput.Request
         val onMismatch: OutputMismatchBehavior? get() = (output as? HandlerOutput.Event)?.onMismatch
     }
 
@@ -75,7 +88,7 @@ internal class GeneratorContext(
         // Per state: how its container is made - written (null) or derived from what. It's one
         // container class for every scope holding that state, so all of them must agree.
         val shapes: List<Pair<ArgDef, List<ArgDef>?>> = scopes.flatMap { scope ->
-            scope.handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type }.map { it to null } +
+            scope.handlers.mapNotNull { it.output.writes }.map { it to null } +
                 scope.derived.map { it.state to it.from }
         }.distinct()
         shapes.groupBy { it.first }.forEach { (state, ways) ->
@@ -102,7 +115,7 @@ internal class GeneratorContext(
     /** A scope's containers in creation order: handler-written ones, then derived ones in
      * declaration order (each only reads containers created before it). */
     fun containersOf(scope: ScopeModel): List<Container> =
-        (scope.handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type } + scope.derived.map { it.state })
+        (scope.handlers.mapNotNull { it.output.writes } + scope.derived.map { it.state })
             .distinct()
             .map(::container)
 
@@ -150,15 +163,15 @@ internal class GeneratorContext(
      */
     val ruleTypes: Map<String, ClassName?> = run {
         val events = scopes.flatMap { scope ->
-            scope.handlers.flatMap { h -> listOfNotNull(h.input, (h.output as? HandlerOutput.Event)?.event) }
+            scope.handlers.flatMap { h -> listOf(h.input) + h.output.cascades }
         }
         val args = scopes.flatMap { scope ->
             listOfNotNull(scope.params) + scope.derived.flatMap { listOf(it.state) + it.from } + scope.handlers.flatMap { h ->
-                h.input.args + h.reads + listOfNotNull((h.output as? HandlerOutput.Data)?.type) +
-                    ((h.output as? HandlerOutput.Event)?.event?.args ?: emptyList())
+                h.input.args + h.reads + listOfNotNull(h.output.writes) + h.output.cascades.flatMap { it.args }
             }
-        }.flatMap { it.walk() }
-        val classes = events.map(types::eventType) + args.mapNotNull { arg ->
+        } + remote.flatMap { api -> api.endpoints.flatMap { it.args + listOfNotNull(it.response) } }
+        val walked = args.flatMap { it.walk() }
+        val classes = events.map(types::eventType) + walked.mapNotNull { arg ->
             when {
                 arg is ArgDef.Created -> ClassName(packages.models, arg.name)
                 arg is ArgDef.Primitive && '.' in arg.typeKey -> ClassName.bestGuess(arg.typeKey)
@@ -175,22 +188,24 @@ internal class GeneratorContext(
     /** A rule's params type - the one params type of every scope it's declared in; `null` if it
      * doesn't use params. */
     fun ruleParams(handler: Handler): TypeName? =
-        if (rules[handler]?.usesParams == true) scopesOf(handler).first().params?.let(types::typeOf) else null
+        if (rules[handler]?.usesParams == true || requests[handler]?.usesParams == true) scopesOf(handler).first().params?.let(types::typeOf) else null
 
     /** Initial values per (scope, container property): the compiled expression. */
     val initials: Map<Pair<String, String>, CompiledRule> = run {
         val errors = mutableListOf<String>()
         val compiled = scopes.flatMap { scope ->
             val writable = scope.handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type }.map { container(it).property }.toSet()
+            val requested = scope.handlers.mapNotNull { (it.output as? HandlerOutput.Request)?.into }.map { container(it).property }.toSet()
             val derived = scope.derived.map { container(it.state).property }.toSet()
             scope.initial.mapNotNull { (name, rule) ->
                 when (name) {
                     in derived -> { errors += "Scope '${scope.name}' initial $name: a derived container's state comes from its transforms - it has no initial value"; null }
+                    in requested -> { errors += "Scope '${scope.name}' initial $name: a request's container starts as RemoteData.Idle - it has no initial value"; null }
                     !in writable -> { errors += "Scope '${scope.name}' initial $name: no such container - the scope's: ${writable.sorted().joinToString()}"; null }
                     else -> try {
                         val env = RuleEnvironment(
                             eventParameter = null, stateNames = emptySet(), reads = emptyMap(),
-                            params = scope.params != null, types = ruleTypes, output = null,
+                            params = scope.params != null, types = ruleTypes, outputs = null,
                         )
                         (scope.name to name) to RuleCompiler(env).compileExpression(RuleParser.parse(rule))
                     } catch (e: RuleException) {
@@ -201,7 +216,13 @@ internal class GeneratorContext(
             }
         }.toMap()
         require(errors.isEmpty()) { "Initial value problems:\n" + errors.joinToString("\n") { " - $it" } }
-        compiled
+        // A request's container starts Idle - nothing to write for it either.
+        val idle = scopes.flatMap { scope ->
+            scope.handlers.mapNotNull { (it.output as? HandlerOutput.Request)?.into }.distinct().map { into ->
+                (scope.name to container(into).property) to CompiledRule(CodeBlock.of("%T.Idle", CoreSymbols.RemoteData), usesParams = false)
+            }
+        }
+        compiled + idle
     }
 
     /** Containers some scope gives an initial value - each gets a `<State>ContainerInitial`. */
@@ -234,7 +255,7 @@ internal class GeneratorContext(
             reads = handler.reads.map(::container).associate { it.property to it.property },
             params = declaredIn.all { it.params != null },
             types = ruleTypes,
-            output = (handler.output as? HandlerOutput.Event)?.event?.simpleName,
+            outputs = (handler.output as? HandlerOutput.Event)?.let { setOf(it.event.simpleName) },
         )
         val compiled = RuleCompiler(env).compile(RuleParser.parse(handler.rule!!))
         if (compiled.usesParams) {
@@ -250,6 +271,109 @@ internal class GeneratorContext(
     private fun handlerName(handler: HandlerModel) = handler.name ?: handler.input.simpleName + when (handler.output) {
         is HandlerOutput.Data -> "StateProcessor"
         is HandlerOutput.Event -> "EventCascader"
+        is HandlerOutput.Request -> "Request"
         HandlerOutput.None -> "SideEffect"
+    }
+
+    // --- remote ----------------------------------------------------------------------------
+
+    val apis: Map<String, RemoteApiModel> = remote.associateBy { it.name }
+
+    fun apiClass(api: RemoteApiModel): ClassName = ClassName(packages.remote, "${api.name}RemoteApi")
+    fun ktorClass(api: RemoteApiModel): ClassName = ClassName(packages.remote, "${api.name}RemoteApiKtor")
+    fun apiProperty(api: RemoteApiModel): String = api.name.replaceFirstChar(Char::lowercaseChar) + "RemoteApi"
+
+    /** The API and endpoint a request calls. */
+    fun endpointOf(request: HandlerOutput.Request): Pair<RemoteApiModel, EndpointModel> {
+        val (apiName, endpointName) = request.call.split('.')
+        val api = requireNotNull(apis[apiName]) { "request ${request.call}: no remote API '$apiName' - declared: ${apis.keys.sorted()}" }
+        val endpoint = requireNotNull(api.endpoints.find { it.name == endpointName }) {
+            "request ${request.call}: '$apiName' has no endpoint '$endpointName' - it has: ${api.endpoints.map { it.name }}"
+        }
+        return api to endpoint
+    }
+
+    /** The APIs a scope's requests call, in first-use order. */
+    fun apisOf(scope: ScopeModel): List<RemoteApiModel> =
+        scope.handlers.mapNotNull { (it.output as? HandlerOutput.Request)?.let(::endpointOf)?.first }.distinct()
+
+    /** The endpoint's response type - `Unit` without one. */
+    fun responseType(endpoint: EndpointModel): TypeName = endpoint.response?.let(types::typeOf) ?: com.squareup.kotlinpoet.UNIT
+
+    /** A request's compiled `args` (in endpoint order), `onSuccess`, `onFailure`. */
+    class CompiledRequest(
+        val api: RemoteApiModel,
+        val endpoint: EndpointModel,
+        val args: List<Pair<String, CodeBlock>>,
+        val onSuccess: CompiledRule?,
+        val onFailure: CompiledRule?,
+    ) {
+        val usesParams: Boolean get() = onSuccess?.usesParams == true || onFailure?.usesParams == true || argsUseParams
+        internal var argsUseParams = false
+    }
+
+    val requests: Map<Handler, CompiledRequest> = run {
+        val errors = mutableListOf<String>()
+        val compiled = handlers.mapNotNull { handler ->
+            val request = handler.request ?: return@mapNotNull null
+            try {
+                handler to compileRequest(handler, request)
+            } catch (e: IllegalArgumentException) {
+                errors += "${handler.className.simpleName}: ${e.message}"
+                null
+            }
+        }.toMap()
+        require(errors.isEmpty()) { "Request problems:\n" + errors.joinToString("\n") { " - $it" } }
+        compiled
+    }
+
+    private fun compileRequest(handler: Handler, request: HandlerOutput.Request): CompiledRequest {
+        val (api, endpoint) = endpointOf(request)
+        val response = responseType(endpoint)
+        val into = types.typeOf((request.into as ArgDef.Generics).parameters.single())
+        require(into == response) { "into is RemoteData<$into>, but ${request.call} responds $response" }
+        val names = endpoint.args.map { it.fieldName!! }
+        val missing = names - request.args.keys
+        val unknown = request.args.keys - names.toSet()
+        require(missing.isEmpty() && unknown.isEmpty()) {
+            listOfNotNull(
+                "args $missing of ${request.call} aren't given".takeIf { missing.isNotEmpty() },
+                "${request.call} has no args $unknown".takeIf { unknown.isNotEmpty() },
+            ).joinToString("; ")
+        }
+        val declaredIn = scopesOf(handler)
+        fun env(outputs: Set<String>?, extra: Map<String, String>) = RuleEnvironment(
+            eventParameter = "event",
+            stateNames = emptySet(),
+            reads = handler.reads.map(::container).associate { it.property to it.property },
+            params = declaredIn.all { it.params != null },
+            types = ruleTypes,
+            outputs = outputs,
+            extra = extra,
+        )
+        var argsUseParams = false
+        val args = names.map { name ->
+            val rule = request.args.getValue(name)
+            val compiled = try {
+                RuleCompiler(env(null, emptyMap())).compileExpression(RuleParser.parse(rule))
+            } catch (e: RuleException) {
+                throw IllegalArgumentException("arg $name: ${e.message}")
+            }
+            argsUseParams = argsUseParams || compiled.usesParams
+            name to compiled.body
+        }
+        val emits = request.emits.map { it.simpleName }.toSet()
+        fun clauses(rule: String?, what: String, extra: Map<String, String>) = rule?.let {
+            try {
+                RuleCompiler(env(emits, extra)).compile(RuleParser.parse(it))
+            } catch (e: RuleException) {
+                throw IllegalArgumentException("$what: ${e.message}")
+            }
+        }
+        return CompiledRequest(
+            api, endpoint, args,
+            onSuccess = clauses(request.onSuccess, "onSuccess", mapOf("result" to "result")),
+            onFailure = clauses(request.onFailure, "onFailure", mapOf("error" to "error")),
+        ).also { it.argsUseParams = argsUseParams }
     }
 }

@@ -105,6 +105,7 @@ abstract class ScopeTyped<P : Any>(
      * close, so this doesn't wire it just to tear it down. */
     override fun close() {
         if (!wiringLazy.isInitialized()) return
+        wiring.closeables.forEach { it.close() }
         wiring.containers.containersEntries.values.forEach { (it as? AutoCloseable)?.close() }
         super.close()
     }

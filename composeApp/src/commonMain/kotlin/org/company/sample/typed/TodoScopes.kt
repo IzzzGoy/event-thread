@@ -3,6 +3,7 @@ package org.company.sample.typed
 import org.company.sample.scopes.registerPersonalScope
 import org.company.sample.scopes.registerTodoDomainScope
 import org.company.sample.scopes.registerTodoDraftScope
+import org.company.sample.scopes.registerSuggestionsScope
 import org.company.sample.scopes.registerTodoTabsScope
 import org.company.sample.scopes.registerWorkScope
 import org.company.sample.todoNavigation
@@ -30,6 +31,7 @@ fun typedTodoScopeHolder(dependencyProvider: DependencyProvider): ScopeHolder = 
     registerPersonalScope()
     registerTodoTabsScope()
     registerTodoDraftScope()
+    registerSuggestionsScope()
 
     todoNavigation()
 }

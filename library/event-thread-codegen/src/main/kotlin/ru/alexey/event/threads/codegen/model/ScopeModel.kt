@@ -54,7 +54,7 @@ data class ScopeModel(
         require(unhandled.isEmpty()) { "Scope '$name' consumes $unhandled but has no handler for it" }
         // A scope's containers are exactly its distinct `data` output states - a read naming
         // anything else would generate a snapshot of a container that doesn't exist.
-        val written = handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type }.toSet()
+        val written = handlers.mapNotNull { it.output.writes }.toSet()
         val known = written.toMutableSet()
         derived.forEach { d ->
             require(d.state !in written) { "Scope '$name': ${d.state} is written by a handler, so it can't also be derived" }
@@ -115,6 +115,7 @@ data class HandlerModel(
         name?.let { requireIdentifier(it, "Handler name") }
         rule?.let {
             require(output != HandlerOutput.None) { "${input.name}: a side effect can't have a rule - it has no output to compute" }
+            require(output !is HandlerOutput.Request) { "${input.name}: a request is generated from its `args`/`onSuccess`/`onFailure` - it has no `rule`" }
             try {
                 RuleParser.parse(it)
             } catch (e: RuleException) {
@@ -129,6 +130,9 @@ data class HandlerModel(
                 }
                 is HandlerOutput.Event -> require(example.emits != null) {
                     "$label: a cascading handler's example needs `emits`"
+                }
+                is HandlerOutput.Request -> require((example.respond != null) != (example.fail != null)) {
+                    "$label: a request's example needs `respond` (the response) or `fail` (an error message)"
                 }
                 HandlerOutput.None -> throw IllegalArgumentException("$label: a side effect has no output to check")
             }
@@ -155,8 +159,13 @@ data class ExampleModel(
     val event: JsonElement? = null,
     /** The handler's own state after the event (state handlers). */
     val expect: JsonElement? = null,
-    /** The events it cascades, in order - each the arguments of the declared output event. */
+    /** The events it cascades, in order - each the arguments of the declared output event (for
+     * a request with several `emits`: `{ "<Event>": { args } }`). */
     val emits: List<JsonElement>? = null,
+    /** Request: what the endpoint responds (its response's JSON). */
+    val respond: JsonElement? = null,
+    /** Request: the endpoint fails with this message. */
+    val fail: String? = null,
 ) {
     init {
         name?.let { requireIdentifier(it, "Example name") }
@@ -196,14 +205,22 @@ data class EventModel(
     val simpleName: String get() = name.substringAfterLast('.')
 }
 
-/** What a [HandlerModel] produces - and so which `EventHandler` variant it maps onto. */
+/** What a [HandlerOutput] produces - and so which `EventHandler` variant it maps onto. */
 @Serializable
 sealed class HandlerOutput {
+
+    /** The state it writes - its container: a `data` type, a `request`'s `into`. */
+    open val writes: ArgDef? get() = null
+
+    /** The events it may cascade: an `event`'s event, a `request`'s `emits`. */
+    open val cascades: List<EventModel> get() = emptyList()
 
     /** New state of type [type] -> `EventHandler.StateProcessor` over a `Datacontainer` of it. */
     @Serializable
     @SerialName("data")
-    data class Data(val type: ArgDef) : HandlerOutput()
+    data class Data(val type: ArgDef) : HandlerOutput() {
+        override val writes: ArgDef get() = type
+    }
 
     /** Cascades [event] onto the bus -> `EventHandler.EventCascader`, with `outputs =
      * setOf(<event>::class)`; [onMismatch] is what happens if it returns anything else. */
@@ -212,7 +229,60 @@ sealed class HandlerOutput {
     data class Event(
         val event: EventModel,
         val onMismatch: OutputMismatchBehavior = OutputMismatchBehavior.Strict,
-    ) : HandlerOutput()
+    ) : HandlerOutput() {
+        override val cascades: List<EventModel> get() = listOf(event)
+    }
+
+    /**
+     * Calls [call] (`"<Api>.<endpoint>"` of the document's `remote`) and tracks it in the
+     * `RemoteData` container [into] -> `EventHandler.Request`. [args]: the endpoint's args, each a
+     * rule expression (`event`, `params`, reads); [onSuccess]/[onFailure]: cascading rules over
+     * `result`/`error`, emitting [emits] events. Fully generated - the developer writes nothing,
+     * but can bind an implementation of their own.
+     */
+    @Serializable
+    @SerialName("request")
+    data class Request(
+        val call: String,
+        /** `RemoteData<R>` of the endpoint's response `R`:
+         * `{ "kind": "generics", "baseClassName": "RemoteData", "field": "todos", "parameters": [ <R> ] }`. */
+        val into: ArgDef,
+        val args: Map<String, String> = emptyMap(),
+        val emits: List<EventModel> = emptyList(),
+        val onSuccess: String? = null,
+        val onFailure: String? = null,
+        val policy: RequestPolicyModel = RequestPolicyModel(),
+        val onMismatch: OutputMismatchBehavior = OutputMismatchBehavior.Strict,
+    ) : HandlerOutput() {
+        override val writes: ArgDef get() = into
+        override val cascades: List<EventModel> get() = emits
+
+        init {
+            require(Regex("[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*").matches(call)) {
+                "request call '$call' isn't `<Api>.<endpoint>`"
+            }
+            require(into is ArgDef.Generics && into.baseClassName.substringAfterLast('.') == "RemoteData" && into.parameters.size == 1) {
+                "request into must be RemoteData<response>: { \"kind\": \"generics\", \"baseClassName\": \"RemoteData\", \"field\": ..., \"parameters\": [ <response> ] }"
+            }
+            require(emits.isNotEmpty() || (onSuccess == null && onFailure == null)) {
+                "request $call: onSuccess/onFailure emit events - declare them in `emits`"
+            }
+            listOfNotNull(onSuccess, onFailure).forEach {
+                try {
+                    RuleParser.parse(it)
+                } catch (e: RuleException) {
+                    throw IllegalArgumentException("request $call: ${e.message}", e)
+                }
+            }
+            args.values.forEach {
+                try {
+                    RuleParser.parse(it)
+                } catch (e: RuleException) {
+                    throw IllegalArgumentException("request $call args: ${e.message}", e)
+                }
+            }
+        }
+    }
 
     /** Nothing observable -> `EventHandler.SideEffect`. */
     @Serializable

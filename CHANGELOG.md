@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+- **Remote data in the schema** (format 1.2) - see `event-thread-codegen/REMOTE.md`:
+  - `remote` APIs: endpoints with `method`, `path` (`{arg}` segments), query args, a JSON `body`,
+    a `response` type. Generated `<Name>RemoteApi` interfaces, and `<Name>RemoteApiKtor` over a
+    Ktor `HttpClient` when every endpoint is HTTP - the bindings' default (`generateKtor`).
+    Types sent or received are generated `@Serializable`.
+  - `request` handler output: `call`, `args` (rule expressions), `into` (a `RemoteData`
+    container), `emits` + `onSuccess`/`onFailure` cascading rules (with `result`/`error`),
+    `policy`. Fully generated (`<Event>Request` + `<Event>RequestRule`); the container defaults to
+    `RemoteData.Idle`; client, API and request are all overridable.
+  - Request examples (`respond` / `fail` / `given`) in the generated contract, against a fake API.
+  - Checked at generation: endpoint and args, response vs `into`, rules, emitted events, HTTP
+    mapping; compatibility levels for APIs, endpoints and requests; reports show requests.
+- Core: `RemoteData<T>` (`Idle`/`Loading`/`Success`/`Failure`, keeping the last value),
+  `RequestPolicy` (`Latest`/`Drop`/`Queue`, retry with backoff, timeout, debounce),
+  `EventHandler.Request` - runs calls off the bus, enforces declared outputs, closed with its scope;
+  `execute(event)` runs one request for tests. "Latest" follows the bus's receipt order, so an
+  older trigger arriving late never replaces a newer one.
+- Event metadata: `EventThreadActionInfo.produces` - every event type a step may produce; typed
+  cascaders and requests with several outputs now show all of them in the event graph.
+- `event-thread-network`: `HttpResponse.successOrThrow()` / `HttpStatusException`;
+  `ktor-client-core` is now an `api` dependency.
+- Sample app: a "Suggestions" feature loaded from a fake server (Ktor `MockEngine`) - schema only,
+  plus one `HttpClient` binding.
+
+### Fixed
+- `generateTypedScopes` deleted the whole `build/reports/eventThread` directory - including
+  `checkScopesCompatibility`'s `compatibility.txt` whenever generation ran after the check (the
+  two tasks' outputs overlapped). It now owns and cleans only its own report files.
+
 ## 1.3.0
 
 ### Added

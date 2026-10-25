@@ -35,8 +35,7 @@ object SchemaValidator {
         val handledBy = scopes.flatMap { scope -> scope.handlers.map { it.input.name to scope } }
             .groupBy({ it.first }, { it.second })
         return scopes.flatMap { scope ->
-            scope.handlers.mapNotNull { handler ->
-                val event = (handler.output as? HandlerOutput.Event)?.event?.name ?: return@mapNotNull null
+            scope.handlers.flatMap { handler -> handler.output.cascades.map { handler to it.name } }.mapNotNull { (handler, event) ->
                 val handlers = handledBy[event].orEmpty().distinct()
                 val reached = handlers.any { it === scope || event in it.consumes }
                 when {
@@ -74,8 +73,7 @@ object SchemaValidator {
         }
         val consumers = scopes.flatMap { s -> s.consumes.map { it to s.name } }.groupBy({ it.first }, { it.second })
         val edges: Map<Node, List<Node>> = scopes.flatMap { scope ->
-            scope.handlers.mapNotNull { h ->
-                val out = (h.output as? HandlerOutput.Event)?.event?.name ?: return@mapNotNull null
+            scope.handlers.flatMap { h -> h.output.cascades.map { h to it.name } }.map { (h, out) ->
                 val targets = listOf(scope.name) + consumers[out].orEmpty().filter { it != scope.name }
                 Node(scope.name, h.input.name) to targets.map { Node(it, out) }
             }

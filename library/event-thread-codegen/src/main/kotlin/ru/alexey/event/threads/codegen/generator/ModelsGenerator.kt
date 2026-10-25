@@ -20,15 +20,15 @@ class ModelsGenerator(private val packageName: String) {
     internal fun generate(context: GeneratorContext): List<FileSpec> {
         val scopes = context.scopes
         val events = scopes.flatMap { scope ->
-            scope.handlers.flatMap { listOfNotNull(it.input, (it.output as? HandlerOutput.Event)?.event) }
+            scope.handlers.flatMap { listOf(it.input) + it.output.cascades }
         }.filterNot(EventModel::isReference)
 
         val argTrees = scopes.flatMap { scope ->
             listOfNotNull(scope.params) +
-                scope.handlers.flatMap { h -> listOfNotNull((h.output as? HandlerOutput.Data)?.type) + h.reads } +
+                scope.handlers.flatMap { h -> listOfNotNull(h.output.writes) + h.reads } +
                 scope.derived.flatMap { listOf(it.state) + it.from } +
                 events.flatMap { it.args }
-        }
+        } + context.remote.flatMap { api -> api.endpoints.flatMap { it.args + listOfNotNull(it.response) } }
         val created = argTrees.flatMap { it.walk().toList() }
             .filterIsInstance<ArgDef.Created>()
             .filter { it.fields.isNotEmpty() }
@@ -37,11 +37,29 @@ class ModelsGenerator(private val packageName: String) {
             require(defs.distinct().size == 1) { "Event '$name' is defined differently in different places" }
             file(context, name, context.types.eventClass(defs.first()))
         }
+        // Types a remote API sends or receives - and the types inside them - are serialized.
+        val definitions = created.associateBy { it.name }
+        val serializable = context.remote
+            .flatMap { api -> api.endpoints.flatMap { it.args + listOfNotNull(it.response) } }
+            .flatMap { it.walk().toList() }.filterIsInstance<ArgDef.Created>().map { it.name }
+            .toMutableSet()
+        do {
+            val nested = serializable.mapNotNull(definitions::get)
+                .flatMap { it.fields.flatMap { f -> f.walk().toList() } }.filterIsInstance<ArgDef.Created>().map { it.name }
+        } while (serializable.addAll(nested))
+
         val typeFiles = created.groupBy { it.name }.map { (name, defs) ->
             require(defs.distinct().size == 1) { "Type '$name' is defined differently in different places" }
-            file(context, name, context.types.dataClass(defs.first()))
+            val type = context.types.dataClass(defs.first())
+            file(context, name, if (name in serializable) type.toBuilder().addAnnotation(SERIALIZABLE).build() else type)
         }
         return eventFiles + typeFiles
+    }
+
+    private companion object {
+        /** By name: generated code needs it only with a remote API, whose consumer applies the
+         * kotlinx.serialization plugin anyway (for the client's JSON). */
+        val SERIALIZABLE = com.squareup.kotlinpoet.ClassName("kotlinx.serialization", "Serializable")
     }
 
     private fun file(context: GeneratorContext, name: String, type: TypeSpec): FileSpec =

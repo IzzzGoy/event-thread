@@ -72,6 +72,11 @@ How an example test works, precisely:
 - State handler: `handler.handle(event)`, then the container's value is compared with `expect`.
 - Cascading handler: `handler.preview(event)` - the events it would emit, nothing dispatched -
   is compared with `emits`.
+- Request handler (see [REMOTE.md](REMOTE.md#examples-and-tests)): its container starts `Success(given)`
+  (or `Idle`), its remote API is a **fake** - the endpoint called answers `respond` or throws `fail`,
+  any other endpoint fails the test - and `handler.execute(event)` runs one request (no bus, no
+  policy): the container must end `Success(respond)` (or `Failure` with that message, keeping
+  `given`) and the returned events must be `emits`.
 - Side effects have no examples (nothing observable to compare).
 
 ### What the contract does not check
@@ -146,10 +151,11 @@ hand-written typed scope.
 | Probe | a test creates it |
 | Nothing else | - generated test support is never run on its own |
 
-In the sample app, `:composeApp:testDebugUnitTest` runs the five contract subclasses
+In the sample app, `:composeApp:testDebugUnitTest` runs the six contract subclasses
 (`TypedScopeContractTests.kt` in `commonTest`, `TypedListContractTests.kt` in `androidUnitTest` -
-Work/Personal need a temp cache directory) and one probe test (`WorkScopeProbeTest`); the other
-four probes are generated but unused.
+Work/Personal need a temp cache directory) and two probe tests: `WorkScopeProbeTest`, and
+`TypedSuggestionsTest` (the generated Ktor API against a `MockEngine` fake server); the other four
+probes are generated but unused.
 
 ## Platforms
 

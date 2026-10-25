@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
-  "format": "1.1",
-  "version": "1.1.0",
+  "format": "1.2",
+  "version": "1.2.0",
   "scopes": [
     {
       "name": "TodoDomain",
@@ -681,6 +681,158 @@
               "expect": "hi"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Suggestions",
+      "description": "Todo ideas loaded from a remote service - fully generated: request, Ktor API, containers.",
+      "initial": {
+        "failures": "0"
+      },
+      "handlers": [
+        {
+          "input": {
+            "name": "LoadSuggestions"
+          },
+          "output": {
+            "kind": "request",
+            "call": "Ideas.suggest",
+            "args": {
+              "count": "3"
+            },
+            "into": {
+              "kind": "generics",
+              "baseClassName": "RemoteData",
+              "field": "suggestions",
+              "parameters": [
+                {
+                  "kind": "generics",
+                  "baseClassName": "List",
+                  "parameters": [
+                    {
+                      "kind": "created",
+                      "name": "Suggestion"
+                    }
+                  ]
+                }
+              ]
+            },
+            "emits": [
+              {
+                "name": "SuggestionsFailed",
+                "args": [
+                  {
+                    "kind": "primitive",
+                    "value": "reason",
+                    "typeKey": "String"
+                  }
+                ]
+              }
+            ],
+            "onFailure": "emit SuggestionsFailed(error.message ?: 'unknown')",
+            "policy": {
+              "concurrency": "drop",
+              "timeoutMs": 5000
+            }
+          },
+          "examples": [
+            {
+              "name": "loads",
+              "respond": [
+                {
+                  "text": "Water the plants"
+                },
+                {
+                  "text": "Call mom"
+                }
+              ],
+              "emits": []
+            },
+            {
+              "name": "failureKeepsTheLastIdeas",
+              "given": [
+                {
+                  "text": "Call mom"
+                }
+              ],
+              "fail": "HTTP 503",
+              "emits": [
+                {
+                  "reason": "HTTP 503"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "input": {
+            "name": "SuggestionsFailed",
+            "args": [
+              {
+                "kind": "primitive",
+                "value": "reason",
+                "typeKey": "String"
+              }
+            ]
+          },
+          "output": {
+            "kind": "data",
+            "type": {
+              "kind": "primitive",
+              "value": "failures",
+              "typeKey": "Int"
+            }
+          },
+          "rule": "state + 1",
+          "examples": [
+            {
+              "name": "counts",
+              "given": 0,
+              "event": {
+                "reason": "x"
+              },
+              "expect": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "remote": [
+    {
+      "name": "Ideas",
+      "description": "A suggestions service - faked in the sample by a Ktor MockEngine (typed/FakeIdeasServer.kt).",
+      "endpoints": [
+        {
+          "name": "suggest",
+          "method": "GET",
+          "path": "suggestions",
+          "args": [
+            {
+              "kind": "primitive",
+              "value": "count",
+              "typeKey": "Int"
+            }
+          ],
+          "response": {
+            "kind": "generics",
+            "baseClassName": "List",
+            "parameters": [
+              {
+                "kind": "created",
+                "name": "Suggestion",
+                "fields": [
+                  {
+                    "kind": "primitive",
+                    "value": "text",
+                    "typeKey": "String"
+                  }
+                ]
+              }
+            ]
+          },
+          "description": "[count] todo ideas."
         }
       ]
     }

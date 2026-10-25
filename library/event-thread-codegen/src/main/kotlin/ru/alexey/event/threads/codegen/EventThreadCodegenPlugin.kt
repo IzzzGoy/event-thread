@@ -25,6 +25,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
             generateTests.convention(true)
             strictSchema.convention(false)
             generateCompose.convention(false)
+            generateKtor.convention(true)
             coreVersion.convention(pluginVersion)
             selectedSource.finalizeValueOnRead()
         }
@@ -52,6 +53,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
             task.generateTests.set(extension.generateTests)
             task.strictSchema.set(extension.strictSchema)
             task.generateCompose.set(extension.generateCompose)
+            task.generateKtor.set(extension.generateKtor)
             task.generatorVersion.set(pluginVersion)
             task.testOutputDirectory.set(project.layout.buildDirectory.dir("generated/eventThread/test"))
             task.reportDirectory.set(project.layout.buildDirectory.dir("reports/eventThread"))
@@ -104,6 +106,10 @@ class EventThreadCodegenPlugin : Plugin<Project> {
                                 project.dependencies.create("$CORE_COORDINATES:${extension.coreVersion.get()}"),
                                 project.dependencies.create("$COMPOSE_COORDINATES:${extension.coreVersion.get()}")
                                     .takeIf { extension.generateCompose.get() },
+                                // Only a schema with an HTTP API needs it - read when the
+                                // configuration resolves, like the options above.
+                                project.dependencies.create("$NETWORK_COORDINATES:${extension.coreVersion.get()}")
+                                    .takeIf { extension.generateKtor.get() && hasHttpApi(spec) },
                             )
                         } else {
                             emptyList()
@@ -114,6 +120,11 @@ class EventThreadCodegenPlugin : Plugin<Project> {
         }
     }
 
+    /** Whether the schema has an HTTP API - `false` if it can't be read here: resolving
+     * dependencies mustn't fail over the schema, generation reports its problems. */
+    private fun hasHttpApi(spec: org.gradle.api.provider.Provider<String>): Boolean =
+        runCatching { ScopeSpecFormat.decodeDocument(spec.get()).remote.any { it.isHttp } }.getOrDefault(false)
+
     companion object {
         const val TASK_NAME = "generateTypedScopes"
         const val COMPATIBILITY_TASK_NAME = "checkScopesCompatibility"
@@ -121,6 +132,7 @@ class EventThreadCodegenPlugin : Plugin<Project> {
         private const val CORE_COORDINATES = "io.github.izzzgoy:event-thread-core"
         private const val TEST_COORDINATES = "io.github.izzzgoy:event-thread-test"
         private const val COMPOSE_COORDINATES = "io.github.izzzgoy:event-thread-compose"
+        private const val NETWORK_COORDINATES = "io.github.izzzgoy:event-thread-network"
         private const val COMPOSE_COMPILER_PLUGIN = "org.jetbrains.kotlin.plugin.compose"
 
         private val TEST_SOURCE_SETS = mapOf("commonMain" to "commonTest", "main" to "test")

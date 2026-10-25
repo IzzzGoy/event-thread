@@ -70,6 +70,7 @@ internal class TypeResolver(private val packageName: String) {
         '.' in name -> ClassName.bestGuess(name)
         name in KOTLIN -> ClassName("kotlin", name)
         name in COLLECTIONS -> ClassName("kotlin.collections", name)
+        name == "RemoteData" -> CoreSymbols.RemoteData
         else -> ClassName(packageName, name)
     }
 

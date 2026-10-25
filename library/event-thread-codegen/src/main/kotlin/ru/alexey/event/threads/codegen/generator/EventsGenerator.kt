@@ -1,5 +1,6 @@
 package ru.alexey.event.threads.codegen.generator
 
+import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -11,12 +12,14 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.asClassName
+import com.squareup.kotlinpoet.joinToCode
+import kotlin.reflect.KClass
 import ru.alexey.event.threads.OutputMismatchBehavior
 import ru.alexey.event.threads.Privacy
 import ru.alexey.event.threads.codegen.model.HandlerOutput
+import ru.alexey.event.threads.codegen.model.RequestPolicyModel
 import ru.alexey.event.threads.codegen.model.ScopeModel
 import ru.alexey.event.threads.codegen.rules.CompiledRule
-import kotlin.reflect.KClass
 
 /**
  * The `.events` package: abstract handler bases (`<Event>StateProcessor`/`EventCascader`/
@@ -37,6 +40,7 @@ class EventsGenerator(private val packageName: String) {
                     handlers.forEach { handler ->
                         addType(base(context, handler))
                         context.rules[handler]?.let { addType(rule(context, handler, it)) }
+                        context.requests[handler]?.let { addType(requestRule(context, handler, it)) }
                     }
                 }
                 .build()
@@ -69,17 +73,67 @@ class EventsGenerator(private val packageName: String) {
                 .addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE)
                 .addParameter("input", handler.event)
                 .returns(LIST.parameterizedBy(CoreSymbols.Event))
-            HandlerOutput.None -> error("A side effect has no rule")
+            HandlerOutput.None, is HandlerOutput.Request -> error("No rule for ${handler.className.simpleName}")
         }
         return builder.addFunction(function.addCode(compiled.body).build()).build()
     }
 
+    /**
+     * `<Name>Rule` of a request: `call` invokes the endpoint with the compiled `args`, and
+     * `onSuccess`/`onFailure` cascade the compiled clauses - nothing left to write.
+     */
+    private fun requestRule(context: GeneratorContext, handler: GeneratorContext.Handler, compiled: GeneratorContext.CompiledRequest): TypeSpec {
+        val request = handler.request!!
+        val params = context.ruleParams(handler)
+        val response = context.responseType(compiled.endpoint)
+        val constructor = FunSpec.constructorBuilder().addParameter("deps", handler.className.nestedClass("Deps"))
+        params?.let { constructor.addParameter("params", it) }
+        val builder = TypeSpec.classBuilder(handler.ruleClassName)
+            .addKdoc(
+                "Generated from the schema request of [%N]: `%L(%L)`%L.", handler.className.simpleName, request.call,
+                request.args.entries.joinToString { "${it.key}: ${it.value}" },
+                listOfNotNull(request.onSuccess?.let { "; on success `$it`" }, request.onFailure?.let { "; on failure `$it`" }).joinToString(""),
+            )
+            .primaryConstructor(constructor.build())
+            .superclass(handler.className)
+            .addSuperclassConstructorParameter("deps")
+        params?.let { builder.addProperty(PropertySpec.builder("params", it, KModifier.PRIVATE).initializer("params").build()) }
+        builder.addFunction(
+            FunSpec.builder("call")
+                .addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE, KModifier.SUSPEND)
+                .addParameter("event", handler.event)
+                .returns(response)
+                .addStatement(
+                    "return %N.%N(%L)", context.apiProperty(compiled.api), compiled.endpoint.name,
+                    compiled.args.map { (name, value) -> CodeBlock.of("%N·=·%L", name, value) }.joinToCode(",·"),
+                )
+                .build()
+        )
+        compiled.onSuccess?.let {
+            builder.addFunction(
+                FunSpec.builder("onSuccess").addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE)
+                    .addParameter("event", handler.event).addParameter("result", response)
+                    .returns(LIST.parameterizedBy(CoreSymbols.Event)).addCode(it.body).build()
+            )
+        }
+        compiled.onFailure?.let {
+            builder.addFunction(
+                FunSpec.builder("onFailure").addModifiers(KModifier.PROTECTED, KModifier.OVERRIDE)
+                    .addParameter("event", handler.event).addParameter("error", Throwable::class)
+                    .returns(LIST.parameterizedBy(CoreSymbols.Event)).addCode(it.body).build()
+            )
+        }
+        return builder.build()
+    }
+
     private fun base(context: GeneratorContext, handler: GeneratorContext.Handler): TypeSpec {
-        val own = handler.ownState?.let(context::container)
+        val own = handler.writes?.let(context::container)
         val reads = handler.reads.map(context::container)
+        val api = handler.request?.let { context.endpointOf(it).first }
         val snapshot = { c: GeneratorContext.Container -> CoreSymbols.ContainerSnapshot.parameterizedBy(c.className, c.state) }
         val deps: List<Pair<String, TypeName>> =
-            listOfNotNull(own?.let { it.property to it.className }) + reads.map { it.property to snapshot(it) }
+            listOfNotNull(own?.let { it.property to it.className }) + reads.map { it.property to snapshot(it) } +
+                listOfNotNull(api?.let { context.apiProperty(it) to context.apiClass(it) })
 
         val builder = TypeSpec.classBuilder(handler.className).addModifiers(KModifier.ABSTRACT)
         if (deps.isNotEmpty()) {
@@ -98,6 +152,11 @@ class EventsGenerator(private val packageName: String) {
         reads.forEach {
             builder.addProperty(
                 PropertySpec.builder(it.property, snapshot(it), KModifier.PROTECTED).initializer("deps.%N", it.property).build()
+            )
+        }
+        api?.let {
+            builder.addProperty(
+                PropertySpec.builder(context.apiProperty(it), context.apiClass(it), KModifier.PROTECTED).initializer("deps.%N", context.apiProperty(it)).build()
             )
         }
 
@@ -120,6 +179,41 @@ class EventsGenerator(private val packageName: String) {
                     builder.addProperty(
                         PropertySpec.builder("onMismatch", CoreSymbols.OutputMismatchBehavior, KModifier.OVERRIDE)
                             .initializer("%T.%L", CoreSymbols.OutputMismatchBehavior, output.onMismatch.name)
+                            .build()
+                    )
+                }
+            }
+            is HandlerOutput.Request -> {
+                val response = context.responseType(context.endpointOf(output).second)
+                builder.superclass(CoreSymbols.Request.parameterizedBy(handler.event, response))
+                builder.addSuperclassConstructorParameter("deps.%N", own!!.property)
+                if (output.emits.isNotEmpty()) {
+                    val outputsType = SET.parameterizedBy(KClass::class.asClassName().parameterizedBy(WildcardTypeName.producerOf(CoreSymbols.Event)))
+                    builder.addProperty(
+                        PropertySpec.builder("outputs", outputsType, KModifier.FINAL, KModifier.OVERRIDE)
+                            .initializer("setOf(%L)", output.emits.map { CodeBlock.of("%T::class", context.types.eventType(it)) }.joinToCode(", "))
+                            .build()
+                    )
+                }
+                if (output.onMismatch != OutputMismatchBehavior.Strict) {
+                    builder.addProperty(
+                        PropertySpec.builder("onMismatch", CoreSymbols.OutputMismatchBehavior, KModifier.OVERRIDE)
+                            .initializer("%T.%L", CoreSymbols.OutputMismatchBehavior, output.onMismatch.name).build()
+                    )
+                }
+                if (!output.policy.isDefault) {
+                    val p = output.policy
+                    val fields = listOfNotNull(
+                        CodeBlock.of("concurrency = %T.Concurrency.%L", CoreSymbols.RequestPolicy, p.concurrency.name.replaceFirstChar(Char::uppercaseChar))
+                            .takeIf { p.concurrency != RequestPolicyModel.Concurrency.latest },
+                        CodeBlock.of("retry = %L", p.retry).takeIf { p.retry != 0 },
+                        CodeBlock.of("retryDelayMs = %L", p.retryDelayMs).takeIf { p.retryDelayMs != 1000L },
+                        p.timeoutMs?.let { CodeBlock.of("timeoutMs = %L", it) },
+                        CodeBlock.of("debounceMs = %L", p.debounceMs).takeIf { p.debounceMs != 0L },
+                    )
+                    builder.addProperty(
+                        PropertySpec.builder("policy", CoreSymbols.RequestPolicy, KModifier.OVERRIDE)
+                            .initializer("%T(%L)", CoreSymbols.RequestPolicy, fields.joinToCode(", "))
                             .build()
                     )
                 }

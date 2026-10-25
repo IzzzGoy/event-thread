@@ -38,6 +38,11 @@ abstract class EventThreadCodegenExtension @Inject constructor(private val objec
      * `kotlin-test` to it. Default `true`. */
     abstract val generateTests: Property<Boolean>
 
+    /** Generates `<Name>RemoteApiKtor` - a Ktor implementation - for each remote API whose
+     * endpoints are all HTTP calls, makes it the bindings' default, and adds `event-thread-network`
+     * (with `addCoreDependency`) when the schema has such an API. Default `true`. */
+    abstract val generateKtor: Property<Boolean>
+
     /** Also generates Compose entry points per scope - `<Name>ScopeContent(params) { ... }` and
      * `current<Name>Scope()` - and adds `event-thread-compose` (with `addCoreDependency`). Default
      * `true` when the Kotlin Compose compiler plugin is applied, else `false`. */

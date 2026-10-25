@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import io.ktor.client.HttpClient
 import kotlinx.serialization.json.Json
 import org.company.sample.AddTodo
 import org.company.sample.Todo
@@ -65,6 +66,9 @@ val typedTodoModule = module {
     factory<LifecycleEventsSideEffect> { LogLifecycleImpl() }
 
     // --- TodoTabs: nothing - selectedList has an `initial`, SelectList a rule ------------------
+
+    // --- Suggestions: just the HttpClient - its API (Ktor), request and containers are generated
+    single<HttpClient> { fakeIdeasClient() }
 
     // --- TodoDraft ----------------------------------------------------------------------------
     factory<DraftContainer> { (params: TodoDraft.Params) -> DraftImpl(params) }

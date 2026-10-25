@@ -40,6 +40,7 @@ alone with `./gradlew generateTypedScopes`.
 | `addCoreDependency` / `coreVersion` | `true` / the plugin's version | adds `event-thread-core` (and, with `generateCompose`, `event-thread-compose`) |
 | `generateCompose` | `true` if the Kotlin Compose compiler plugin is applied | `<Name>ScopeContent { }` / `current<Name>Scope()` composables |
 | `generateTests` | `true` | contracts and probes in the test source set ([TESTING.md](TESTING.md)) |
+| `generateKtor` | `true` | Ktor implementations of HTTP remote APIs as the bindings' default; adds `event-thread-network` when the schema has one |
 | `strictSchema` | `false` | schema warnings (cascade loops, long rules) fail the build |
 | `baseline` | unset | the released schema, for `checkScopesCompatibility` |
 
@@ -64,15 +65,17 @@ A versioned document:
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
-  "format": "1.1",
+  "format": "1.2",
   "version": "1.0.0",
-  "scopes": [ ... ]
+  "scopes": [ ... ],
+  "remote": [ ... ]
 }
 ```
 
 `$schema` points editors at [`scopes.schema.json`](scopes.schema.json) (completion, inline
 errors - also what an AI agent should validate against); `format` and `version` are explained in
-[Versioning](#versioning). Format 1.1 adds handler `rule`s; 1.0 documents read unchanged. A bare
+[Versioning](#versioning). Format 1.1 adds handler `rule`s and container `initial`s, 1.2 `remote`
+APIs and `request` handlers; older documents read unchanged. A bare
 array of scopes (the oldest shape) still reads, without a version.
 
 A scope:
@@ -118,7 +121,7 @@ A scope:
 | Field | Meaning |
 | --- | --- |
 | `input` | The event handled. A qualified name references an existing class; a simple name with `args` defines one (generated) |
-| `output` | `data` (`type`: the state it updates - its container) → `StateProcessor`; `event` → `EventCascader` (`outputs` fixed to that event, enforced; `onMismatch`: `Strict`/`Warning`/`Silent`); `none` → `SideEffect` |
+| `output` | `data` (`type`: the state it updates - its container) → `StateProcessor`; `event` → `EventCascader` (`outputs` fixed to that event, enforced; `onMismatch`: `Strict`/`Warning`/`Silent`); `request` (a remote call into a `RemoteData` container - see [Remote data](#remote-data)) → `Request`, fully generated; `none` → `SideEffect` |
 | `reads` | Containers it reads but doesn't update, by state type → a read-only `ContainerSnapshot` |
 | `name` | Base class name. Default `<Event><Kind>` (`AddTodoStateProcessor`); needed only when two handlers would collide |
 | `privacy`, `override` | Registration metadata, as `thread<T> { privacy(...); override(...) }` |
@@ -147,7 +150,8 @@ Under the configured `packageName`:
 | `.scopes` | `<Name>ScopeKey : ScopeKey<P>`; with `generateCompose`, `<Name>ScopeContent(params) { }` and `current<Name>Scope()`; `<Name>ScopeBindings` (one factory per container and handler) and `<Name>ScopeDependencyBindings` (it, from a DependencyProvider); `<Name>Scope` with its `wire()`; `<Name>ScopeFragment` (dependsOn/consumes); `ScopeHolderBuilder.register<Name>Scope()` / `register<Name>Scope(bindings)` |
 | `.events` | Abstract handler bases, one `<Event>Handler.kt` per input event; each with a nested `Deps` (its container + snapshots); a `<Handler>Rule` implementation for each handler with a `rule` |
 | `.containers` | Abstract `<State>Container`s; a derived one has `Deps` with its source containers; `<State>ContainerInitial` for containers with an `initial` |
-| `.models` | Events and `created` types the schema defines |
+| `.models` | Events and `created` types the schema defines (`@Serializable` when a remote API sends or receives them) |
+| `.remote` | `<Name>RemoteApi` per remote API, and `<Name>RemoteApiKtor` when all its endpoints are HTTP calls |
 
 Containers and handler bases are shared by every scope using the same state / the same handler -
 two scopes with identical handlers get one set of bases.
@@ -193,6 +197,30 @@ dispatcher, `onEach` logging).
 The full language - names (`event`, `state`, reads, `params`, `it`), operators, pipeline stages
 (`where`, `select`, `update ... set`, `count`, `any`, `sum`, `sortBy`, ...), cascading clauses,
 initial values, the checks, a cookbook and the grammar - is in [RULES.md](RULES.md).
+
+## Remote data
+
+Server calls are declared, not written: an API in the document's `remote`, a handler with a
+`request` output calling it.
+
+```text
+"remote": [ { "name": "Todo", "endpoints": [
+  { "name": "loadTodos", "method": "GET", "path": "lists/{listId}/todos", "args": [ <listId> ], "response": <List<Todo>> } ] } ]
+
+{ "input": Refresh, "output": { "kind": "request", "call": "Todo.loadTodos", "args": { "listId": "params.listId" },
+  "into": <RemoteData<List<Todo>> "todos">, "emits": [ LoadFailed ], "onFailure": "emit LoadFailed(error.message ?: '')",
+  "policy": { "concurrency": "latest", "retry": 2, "timeoutMs": 10000 } } }
+```
+
+Generated: `TodoRemoteApi` with a Ktor implementation, the `RefreshRequest` handler and its
+implementation, and the `todos: RemoteData<List<Todo>>` container (`Idle` / `Loading(previous)` /
+`Success` / `Failure(error, previous)`). The request runs the call off the bus, with its
+concurrency policy (cancel the running one, drop new triggers, or queue them), retries, timeout
+and debounce, then dispatches `onSuccess`/`onFailure`'s events. The app binds one `HttpClient`.
+Every piece stays overridable: the client, the API (another transport, a fake), the request.
+Request examples run in the contract against a fake API.
+
+The full reference: [REMOTE.md](REMOTE.md).
 
 ## Using a scope from code and Compose
 

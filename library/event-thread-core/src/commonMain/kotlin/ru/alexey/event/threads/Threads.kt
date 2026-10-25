@@ -28,7 +28,7 @@ open class EventThread<T: Event>(
      * order - see [EventThreadActionInfo]. */
     val eventMetadatas: EventThreadInfo
         get() = EventThreadInfo(metadata, eventThreadActions.map {
-            EventThreadActionInfo(it.type, it.producedType?.simpleName)
+            EventThreadActionInfo(it.type, it.producedType?.simpleName, it.produces.mapNotNull { p -> p.simpleName })
         })
 
     /** Appends [eventThreadAction] to this thread's action chain - the mechanism behind `.then {
@@ -42,7 +42,7 @@ open class EventThread<T: Event>(
     /** Appends every action in [actions] to this thread's chain - used when merging a
      * later/inherited registration for the same event type onto this one. */
     operator fun plus(actions: List<EventThreadAction<Event>>) {
-        eventThreadActions.addAll(actions.map { EventThreadAction(it.action, it.type, it.producedType) })
+        eventThreadActions.addAll(actions.map { EventThreadAction(it.action, it.type, it.producedType, it.produces) })
     }
 }
 
@@ -57,7 +57,7 @@ data class EventThreadInfo(
      * subscribed event, gathered from every `cascade` step's non-null
      * [EventThreadActionInfo.producedType]. */
     val producedTypes: Set<String>
-        get() = actions.filter { it.type == EventType.cascade }.mapNotNull { it.producedType }.toSet()
+        get() = actions.filter { it.type == EventType.cascade }.flatMap { it.produces }.toSet()
 }
 
 /** One chained step's [type], plus - for a `cascade` step - the simple name of the event class
@@ -74,6 +74,9 @@ data class EventThreadInfo(
 data class EventThreadActionInfo(
     val type: EventType,
     val producedType: String? = null,
+    /** Every event type the step may produce - [producedType] alone, or (a typed cascader or
+     * request declaring several outputs) all of them. */
+    val produces: List<String> = listOfNotNull(producedType),
 )
 
 /** What a chained action does to the event pipeline - `consume` ([ru.alexey.event.threads.Scope.
@@ -98,6 +101,8 @@ class EventThreadAction<T: Event>(
     val action: suspend (T) -> Unit,
     val type: EventType,
     val producedType: KClass<out Event>? = null,
+    /** Every event type the action may produce - see [EventThreadActionInfo.produces]. */
+    val produces: Set<KClass<out Event>> = setOfNotNull(producedType),
 )
 
 /** Declared metadata for an [EventThread] - [description] and [privacy] are purely informational;

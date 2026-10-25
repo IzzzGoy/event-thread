@@ -24,6 +24,7 @@ handler bases); you write only the logic.
 | **Handler** | `{ "input": ..., "output": ... }` | an abstract handler base you implement |
 | **Relation** | `dependsOn`, `consumes` | a fragment registered with the scope |
 | **Example** | `examples` on a handler | a generated test of your implementation |
+| **Remote API** | the document's `remote` | `<Name>RemoteApi` (+ a Ktor implementation) |
 
 The three handler kinds - pick by **what the handler produces**:
 
@@ -32,6 +33,7 @@ The three handler kinds - pick by **what the handler produces**:
 | a new value of one piece of the scope's state | `{ "kind": "data", "type": <state> }` | `StateProcessor` | `process(event, state): State` |
 | other events | `{ "kind": "event", "event": <event> }` | `EventCascader` | `cascade(input): List<Event>` |
 | nothing observable (logging, analytics, navigation call) | `{ "kind": "none" }` | `SideEffect` | `handle(event)` |
+| the result of a remote call - loading, then data or an error | `{ "kind": "request", "call": "<Api>.<endpoint>", "into": <RemoteData<R>>, ... }` | `Request` | nothing - generated (§6) |
 
 A **state type identifies a container**: every handler whose `data` output has the same type
 (spelled identically) updates the *same* container. Different state = different type spelling
@@ -52,12 +54,13 @@ A **state type identifies a container**: every handler whose `data` output has t
    scope receives from *other* scopes (`consumes`).
 5. **Write the document** (§3), validate it in the editor through `$schema`.
 6. **Write rules** for handlers whose behaviour is a plain function of the event and state (§5) -
-   they need no code.
+   they need no code. Declare remote calls as `remote` APIs and `request` handlers (§6) - no code
+   either.
 7. **Generate**: `./gradlew generateTypedScopes`. Fix reported problems - all are listed at once.
-8. **Add examples** to handlers whose result is deterministic (§6).
+8. **Add examples** to handlers whose result is deterministic (§7).
 9. **Implement** the rest - `build/reports/eventThread/tasks/<Scope>.md` lists every binding to write.
 10. **Test** - extend `<Name>ScopeContract` (see [TESTING.md](TESTING.md)).
-11. **Version** - bump `version` as the changes require (§9).
+11. **Version** - bump `version` as the changes require (§10).
 
 ---
 
@@ -128,6 +131,7 @@ Breaking any of these fails generation with the message shown (all problems are 
 | `format` must be `1.x` with `x` ≤ the plugin's | `... is newer than this plugin understands ... update event-thread-codegen` |
 | `version`, if present, is semver `major.minor.patch[-pre]` | `Schema version '...' isn't semver` |
 | A document using `rule` declares `"format": "1.1"` (or later) | `Handler rules need "format": "1.1"` |
+| A document using `remote`/`request` declares `"format": "1.2"` | `Remote APIs and request handlers need "format": "1.2"` |
 | No unknown fields anywhere (the parser is strict) | a serialization error naming the field |
 | `kind` values are exact: `primitive`/`generics`/`created`, `data`/`event`/`none` | a serialization error |
 
@@ -307,7 +311,92 @@ interface WorkScopeBindings {
 
 ---
 
-## 6. Conventions - not enforced, but follow them
+## 6. Remote data - requests
+
+Calls to a server are declared too: the document's `remote` lists APIs and their endpoints, and a
+handler with a `request` output calls one, tracking it in a `RemoteData` container
+(`Idle` / `Loading` / `Success` / `Failure`, keeping the last value) and cascading events after.
+All of it is generated - the API interface, a Ktor implementation, the handler, the container -
+and every piece is an overridable default. The complete reference: [REMOTE.md](REMOTE.md).
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json",
+  "format": "1.2",
+  "version": "1.0.0",
+  "remote": [
+    {
+      "name": "Weather",
+      "endpoints": [
+        {
+          "name": "forecast", "method": "GET", "path": "cities/{city}/forecast",
+          "args": [
+            { "kind": "primitive", "value": "city", "typeKey": "String" },
+            { "kind": "primitive", "value": "days", "typeKey": "Int" }
+          ],
+          "response": { "kind": "created", "name": "Forecast", "fields": [
+            { "kind": "primitive", "value": "city", "typeKey": "String" },
+            { "kind": "generics", "baseClassName": "List", "field": "temperatures", "parameters": [ { "kind": "primitive", "value": "t", "typeKey": "Double" } ] }
+          ] }
+        }
+      ]
+    }
+  ],
+  "scopes": [
+    {
+      "name": "CityWeather",
+      "params": { "kind": "created", "name": "CityParams", "fields": [ { "kind": "primitive", "value": "city", "typeKey": "String" } ] },
+      "initial": { "failures": "0" },
+      "handlers": [
+        {
+          "input": { "name": "LoadForecast", "args": [ { "kind": "primitive", "value": "days", "typeKey": "Int" } ] },
+          "output": {
+            "kind": "request",
+            "call": "Weather.forecast",
+            "args": { "city": "params.city", "days": "event.days" },
+            "into": { "kind": "generics", "baseClassName": "RemoteData", "field": "forecast", "parameters": [ { "kind": "created", "name": "Forecast" } ] },
+            "emits": [ { "name": "ForecastFailed", "args": [ { "kind": "primitive", "value": "reason", "typeKey": "String" } ] } ],
+            "onFailure": "emit ForecastFailed(error.message ?: 'unknown')",
+            "policy": { "concurrency": "latest", "retry": 1, "timeoutMs": 10000 }
+          },
+          "examples": [
+            { "name": "loads", "event": { "days": 2 }, "respond": { "city": "Oslo", "temperatures": [ 3.5, 4.0 ] }, "emits": [] },
+            { "name": "offline", "event": { "days": 2 }, "fail": "offline", "emits": [ { "reason": "offline" } ] }
+          ]
+        },
+        {
+          "input": { "name": "ForecastFailed", "args": [ { "kind": "primitive", "value": "reason", "typeKey": "String" } ] },
+          "output": { "kind": "data", "type": { "kind": "primitive", "value": "failures", "typeKey": "Int" } },
+          "rule": "state + 1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Generated: `WeatherRemoteApi` + `WeatherRemoteApiKtor`, a `@Serializable` `Forecast`,
+`LoadForecastRequest` + `LoadForecastRequestRule`, the `forecast: RemoteData<Forecast>` container
+(starting `Idle`). The app binds one `HttpClient` (base URL, JSON, auth) - nothing else.
+
+| Request field | |
+| --- | --- |
+| `call` | `"<Api>.<endpoint>"` |
+| `args` | every endpoint arg, as a rule expression (`event`, `params`, `reads`) |
+| `into` | `RemoteData<R>` of the endpoint's response `R` - the container |
+| `emits` / `onSuccess` / `onFailure` | events it may cascade; cascading rules after success (sees `result`) / failure (sees `error`) |
+| `policy` | `concurrency` (`latest` / `drop` / `queue`), `retry`, `retryDelayMs`, `timeoutMs`, `debounceMs` |
+
+**Choose `concurrency`** by what a second trigger means: a newer request (`latest` - refresh,
+search), a duplicate (`drop` - "load more", double taps), or more work (`queue` - saves).
+
+Request examples run against a fake API: `respond` (the response) or `fail` (an error message),
+optionally `given` (the last loaded value); the container must end `Success(respond)` or
+`Failure` keeping `given`, and the events must be `emits`.
+
+---
+
+## 7. Conventions - not enforced, but follow them
 
 **Naming**
 
@@ -369,7 +458,7 @@ the schema keeps the contract self-contained.
 
 ---
 
-## 7. Recipes
+## 8. Recipes
 
 **A list per params** - same scope, one instance per list:
 
@@ -405,7 +494,7 @@ write:
 
 ---
 
-## 8. Anti-patterns
+## 9. Anti-patterns
 
 | Don't | Why | Do |
 | --- | --- | --- |
@@ -416,22 +505,23 @@ write:
 | `consumes` an event emitted in the same scope | routing skips the emitting scope's key | handle it directly |
 | Examples for handlers with random/time output | flaky tests | examples only for deterministic ones |
 | Params for injectable configuration | creates needless instances | inject through bindings |
-| Bump `version` arbitrarily | the compatibility check enforces meaning | follow §9 |
+| Bump `version` arbitrarily | the compatibility check enforces meaning | follow §10 |
 
 ---
 
-## 9. Versioning
+## 10. Versioning
 
-- `format` - the schema-language version: `1.0`, or `1.1` to use `rule`s and `initial`s. Use the lowest that has
+- `format` - the schema-language version: `1.0`; `1.1` for `rule`s and `initial`s; `1.2` for
+  `remote` APIs and `request` handlers. Use the lowest that has
   what you need; a plugin older than the format rejects the document with "update".
 - `version` - semver of *your contract*, checked against a `baseline` (the schema as last
   released) by `checkScopesCompatibility`:
 
 | Bump | When |
 | --- | --- |
-| MAJOR | something removed or changed in meaning: a scope, handler, container or relation removed; a state, params, event or output type changed; a handler's `reads` changed; `override`/`onMismatch` changed; a `rule` or `initial` removed (bindings relying on it stop compiling) |
-| MINOR | something added: scopes, handlers, containers, `dependsOn`/`consumes` entries, a `rule` or `initial` |
-| PATCH | only descriptions, `privacy`, examples, a changed `rule` or `initial` |
+| MAJOR | something removed or changed in meaning: a scope, handler, container or relation removed; a state, params, event or output type changed; a handler's `reads` changed; `override`/`onMismatch` changed; a `rule` or `initial` removed (bindings relying on it stop compiling); an endpoint removed or its args/response changed; a request's `call`/`into`/`emits` changed |
+| MINOR | something added: scopes, handlers, containers, `dependsOn`/`consumes` entries, a `rule` or `initial`, a remote API or endpoint |
+| PATCH | only descriptions, `privacy`, examples, a changed `rule` or `initial`, an endpoint's HTTP mapping, a request's `args`/`onSuccess`/`onFailure`/`policy` |
 
 Before `1.0.0`, a MAJOR change needs a minor bump and everything else a patch. At each release,
 copy the schema to the baseline file.
@@ -446,10 +536,11 @@ an inconsistent state fails the build.
 ### Output contract
 
 - Output **one JSON document** - no comments, no trailing commas, no Markdown inside.
-- Root: `{ "$schema": "<the URL in §3>", "format": "1.1", "version": "<semver>", "scopes": [...] }`.
+- Root: `{ "$schema": "<the URL in §3>", "format": "1.2", "version": "<semver>", "scopes": [...], "remote": [...] }`
+  (`remote` only when the feature calls a server).
 - Use **only** the fields in [`scopes.schema.json`](scopes.schema.json). Never add others.
 - When modifying an existing schema: keep everything not asked to change byte-identical, and
-  bump `version` per §9.
+  bump `version` per §10.
 
 ### Procedure
 
@@ -465,7 +556,10 @@ an inconsistent state fails the build.
    `reads` and `params` a `rule` (§5) - using only the names, operators and stages listed there.
    Leave the rest (ids, time, I/O) without one. Give containers that start from a constant or
    a params field an `initial`. Write strings in rules as `'...'`.
-7. Add examples only for deterministic handlers (§6), with values exactly as the Kotlin
+   For every call to a server: an endpoint in `remote` (method, path relative to the base URL,
+   args, response) and a `request` handler (§6) with `args` for every endpoint arg, `into` as
+   `RemoteData<response>`, and `emits` + `onFailure` when the app must react to failures.
+7. Add examples only for deterministic handlers (§7), with values exactly as the Kotlin
    constructors expect (parameter names = JSON keys) - ruled handlers included.
 8. Self-check (below), then validate: JSON Schema first, then `./gradlew generateTypedScopes`.
    Fix every reported problem and repeat until it passes with no errors.
@@ -487,6 +581,8 @@ an inconsistent state fails the build.
 | Behaviour is a pure function of event/state/reads/params? | a `rule` (§5) |
 | Container starts from a constant or a params field? | an `initial` entry (§5) |
 | Needs ids, time, I/O, logging? | no rule - code |
+| Loads or sends data over the network? | a `remote` endpoint + a `request` handler (§6) |
+| A second trigger while loading is newer / a duplicate / more work? | `policy.concurrency` `latest` / `drop` / `queue` |
 
 ### Self-check before validating
 
@@ -501,7 +597,10 @@ an inconsistent state fails the build.
 - [ ] Examples: `data` → `given` + `expect`; `event` → `emits`; `none` → none; all `reads` given.
 - [ ] Rules: `data` → an expression; `event` → `[when ...] emit <its output event>(...)`; no rule
       on `none`; only `event`, `state`/own container, `reads` names, `params`, `it` (in stages).
-- [ ] `version` bumped per §9 if an existing schema changed.
+- [ ] Requests: `call` is `<Api>.<endpoint>` of `remote`; `args` has exactly the endpoint's args;
+      `into` is `RemoteData` of the endpoint's `response`; events in `onSuccess`/`onFailure` are
+      in `emits` and handled somewhere; examples have `respond` or `fail`.
+- [ ] `version` bumped per §10 if an existing schema changed.
 
 ### After generation
 

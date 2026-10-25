@@ -27,7 +27,7 @@ object ScopeReports {
         document.scopes.forEach { scope ->
             appendLine("  subgraph ${id(scope.name)}[\"${scope.name}${scope.params?.let { " (params)" } ?: ""}\"]")
             scope.handlers.map { it.input.name }.distinct().forEach { appendLine("    ${id(scope.name, it)}([${short(it)}])") }
-            (scope.handlers.mapNotNull { (it.output as? HandlerOutput.Data)?.type } + scope.derived.map { it.state }).distinct().forEach {
+            (scope.handlers.mapNotNull { it.output.writes } + scope.derived.map { it.state }).distinct().forEach {
                 appendLine("    ${id(scope.name, "c:" + containerName(it))}[(${containerName(it).replaceFirstChar(Char::lowercaseChar)})]")
             }
             scope.handlers.forEach { h ->
@@ -39,6 +39,16 @@ object ScopeReports {
                         if (scope.handlers.none { it.input.name == out.event.name }) appendLine("    $to([${short(out.event.name)}])")
                         appendLine("    $from -- emits --> $to")
                     }
+                    is HandlerOutput.Request -> {
+                        val call = id(scope.name, h.input.name, "call")
+                        appendLine("    $call{{\"${out.call}\"}}")
+                        appendLine("    $from --> $call --> ${id(scope.name, "c:" + containerName(out.into))}")
+                        out.emits.forEach { e ->
+                            val to = id(scope.name, e.name)
+                            if (scope.handlers.none { it.input.name == e.name }) appendLine("    $to([${short(e.name)}])")
+                            appendLine("    $call -- emits --> $to")
+                        }
+                    }
                     HandlerOutput.None -> appendLine("    $from --> ${id(scope.name, h.input.name, "fx")}{{side effect}}")
                 }
                 h.reads.forEach { appendLine("    ${id(scope.name, "c:" + containerName(it))} -. read .-> $from") }
@@ -49,7 +59,7 @@ object ScopeReports {
             appendLine("  end")
         }
         document.scopes.forEach { scope ->
-            scope.handlers.mapNotNull { (it.output as? HandlerOutput.Event)?.event?.name }.distinct().forEach { event ->
+            scope.handlers.flatMap { h -> h.output.cascades.map { it.name } }.distinct().forEach { event ->
                 consumers[event].orEmpty().filter { it != scope.name }.forEach { target ->
                     appendLine("  ${id(scope.name, event)} -. routed .-> ${id(target, event)}")
                 }
@@ -61,7 +71,7 @@ object ScopeReports {
 
     /** Per scope (keyed by file name): what to implement. */
     fun tasks(packageName: String, document: ScopeDocument): Map<String, String> {
-        val context = GeneratorContext(packageName, document.scopes)
+        val context = GeneratorContext(packageName, document.scopes, remote = document.remote)
         val generator = ScopeGenerator(packageName)
         return document.scopes.associate { scope -> "${scope.name}.md" to task(context, generator, scope, document) }
     }
@@ -81,11 +91,14 @@ object ScopeReports {
         val members = generator.membersOf(context, scope)
         appendLine("## Containers")
         appendLine()
-        members.filter { it.handles == null }.forEach { m ->
+        members.filter { it.kind == ScopeGenerator.Kind.Container }.forEach { m ->
             val c = context.containers.values.first { it.className == m.returns }
             val derivedFrom = c.from?.joinToString { context.container(it).property }
             val initial = scope.initial[m.name]
-            if (initial != null) {
+            val requested = scope.handlers.any { (it.output as? HandlerOutput.Request)?.into?.let(context::container) == c }
+            if (requested) {
+                appendLine("- [x] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`: a request's container, starting `RemoteData.Idle` (`${context.initialClass(c).simpleName}`); bind your own to replace it.")
+            } else if (initial != null) {
                 appendLine("- [x] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`: generated from `initial` `$initial` (`${context.initialClass(c).simpleName}`); bind your own to replace it.")
             } else {
                 appendLine("- [ ] `${m.name}` -> `${m.returns.simpleName}` holding `${c.state}`. " +
@@ -108,10 +121,13 @@ object ScopeReports {
         val what = when (val out = h.output) {
             is HandlerOutput.Data -> "on `${short(h.input.name)}`, compute the new `${context.container(out.type).property}` (`${context.container(out.type).state}`) in `process(event, state)`"
             is HandlerOutput.Event -> "on `${short(h.input.name)}`, return the `${short(out.event.name)}` events to emit (or none) from `cascade(input)`"
+            is HandlerOutput.Request -> "generated from the request `${out.call}`"
             HandlerOutput.None -> "on `${short(h.input.name)}`, perform the side effect in `handle(event)`"
         }
         val rule = h.rule
-        if (rule != null) {
+        if (h.output is HandlerOutput.Request) {
+            append("- [x] `${name.replaceFirstChar(Char::lowercaseChar)}` -> `$name`: $what (`${handler.ruleClassName.simpleName}`) into `${context.container(h.output.writes!!).property}`; bind your own to replace it.")
+        } else if (rule != null) {
             // Generated - nothing to write unless the default is to be replaced.
             append("- [x] `${name.replaceFirstChar(Char::lowercaseChar)}` -> `$name`: generated from the rule `$rule` (`${handler.ruleClassName.simpleName}`); bind your own to replace it.")
         } else {
@@ -124,6 +140,8 @@ object ScopeReports {
             ex.given?.let { append(" given `$it`;") }
             if (ex.reads.isNotEmpty()) append(" reads `${kotlinx.serialization.json.JsonObject(ex.reads)}`;")
             append(" event `${ex.event ?: "(object)"}`")
+            ex.respond?.let { append(" responding `$it`") }
+            ex.fail?.let { append(" failing `$it`") }
             ex.expect?.let { append(" -> `$it`") }
             ex.emits?.let { append(" -> emits `$it`") }
         }

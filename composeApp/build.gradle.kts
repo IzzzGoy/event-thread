@@ -58,6 +58,10 @@ kotlin {
             implementation(libs.kermit)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
+            // The fake "Ideas" server behind the generated Ktor API (typed/FakeIdeasServer.kt).
+            implementation(libs.ktor.client.mock)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
         }

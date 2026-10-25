@@ -28,6 +28,9 @@ class ScopeWiring internal constructor(
     @PublishedApi
     internal val containers = ContainerBuilder()
 
+    /** Handlers owning resources of their own (requests' coroutines) - closed with the scope. */
+    internal val closeables = mutableListOf<AutoCloseable>()
+
     /** Handler types [handler] couldn't resolve - reported together once [ScopeTyped.wire] ends. */
     internal val missingHandlers = mutableListOf<String>()
 
@@ -108,6 +111,13 @@ class ScopeWiring internal constructor(
                     "pass it the same instance the scope gets (and register containers before handlers)"
             }
             is EventHandler.EventCascader<*> -> handler.attach(eventBus)
+            is EventHandler.Request<*, *> -> {
+                check(containers.containersEntries.values.any { it === handler.datacontainer }) {
+                    "${handler::class.simpleName} writes a container that isn't registered on this scope - " +
+                        "pass it the same instance the scope gets (and register containers before handlers)"
+                }
+                closeables += handler
+            }
             is EventHandler.SideEffect<*> -> Unit
         }
         // Anonymous handler objects have no class name - fall back to the event's.
@@ -117,7 +127,24 @@ class ScopeWiring internal constructor(
                 output(*handler.outputs.toTypedArray())
                 onMismatch(handler.onMismatch)
             }
+            if (handler is EventHandler.Request<*, *>) {
+                output(*handler.outputs.toTypedArray())
+                onMismatch(handler.onMismatch)
+            }
         }.build()
+        if (handler is EventHandler.Request<E, *>) {
+            // Its events go out after the call, from the request's own coroutine - checked the
+            // same way a cascader's are.
+            handler.attach { event, events ->
+                val declared = thread.declaredOutputs
+                val bus = if (declared == null) eventBus else ValidatingEventBus(eventBus, description, event, declared)
+                try {
+                    events.forEach { bus += it }
+                } catch (violation: Throwable) {
+                    eventBus.reportErrorAsync(event, violation)
+                }
+            }
+        }
 
         val action: suspend (E) -> Unit = when (handler) {
             // Same enforcement as a DSL `.then { }` with output<>() declared: pushes go through a
@@ -129,10 +156,9 @@ class ScopeWiring internal constructor(
             }
             else -> { event -> handler.handle(event) }
         }
-        // One action, so one producedType: exact when the cascader declares a single output. With
-        // several, the graph's per-action edge can't name them all - allowedOutputs still does.
-        val produced = (handler as? EventHandler.EventCascader<*>)?.outputs?.singleOrNull()
-        thread(EventThreadAction(action, handler.eventType, produced))
+        // producedType: exact when a single output is declared; `produces` names them all.
+        val outputs = (handler as? EventHandler.EventCascader<*>)?.outputs ?: (handler as? EventHandler.Request<*, *>)?.outputs ?: emptySet()
+        thread(EventThreadAction(action, handler.eventType, outputs.singleOrNull(), outputs))
         eventBus(type) { thread }
     }
 
@@ -141,6 +167,8 @@ class ScopeWiring internal constructor(
     private val EventHandler<*>.eventType: EventType
         get() = when (this) {
             is EventHandler.StateProcessor<*, *> -> EventType.modification
+            // A request writes its container and cascades - the graph needs its edges.
+            is EventHandler.Request<*, *> -> if (outputs.isEmpty()) EventType.modification else EventType.cascade
             is EventHandler.EventCascader<*> -> EventType.cascade
             is EventHandler.SideEffect<*> -> EventType.consume
         }

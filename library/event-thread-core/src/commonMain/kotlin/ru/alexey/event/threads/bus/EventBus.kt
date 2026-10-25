@@ -246,13 +246,15 @@ class EventBus(
 
     init {
         coroutineScope.launch {
+            var sequence = 0L
             for (event in channel) {
                 _received.tryEmit(event)
+                val order = EventSequence(sequence++)
                 // One coroutine per event, not one per (watchers/dispatch/output) - dispatch of
                 // different events still runs concurrently (this launch doesn't block the loop
                 // from picking up the next event), but the three steps within a single event
                 // now run in a fixed, deterministic order instead of racing each other.
-                launch { dispatch(event) }
+                launch(order) { dispatch(event) }
             }
         }
     }
@@ -310,4 +312,14 @@ class EventBus(
             return EventBus(CoroutineScope(Dispatchers.Default), emptyList())
         }
     }
+}
+
+/**
+ * The order this bus took an event in, in the context of that event's dispatch. Events are
+ * dispatched concurrently, so handlers can see two events in a different order than they were
+ * sent; a handler where order matters (a [ru.alexey.event.threads.scopeholder.typed.EventHandler.Request]'s
+ * "latest wins") reads this instead. Absent for events routed in from another scope.
+ */
+internal class EventSequence(val value: Long) : kotlin.coroutines.AbstractCoroutineContextElement(Key) {
+    companion object Key : kotlin.coroutines.CoroutineContext.Key<EventSequence>
 }

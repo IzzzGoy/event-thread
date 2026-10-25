@@ -14,7 +14,7 @@ import com.squareup.kotlinpoet.joinToCode
  * - [params]: whether the scope has params;
  * - [types]: simple name -> class, for constructions (`Todo(...)`) and objects (`Done`); `null`
  *   value: a name two schema types share;
- * - [output]: the declared output event of a cascading handler (simple name).
+ * - [outputs]: the events a cascading rule may emit (simple names).
  */
 class RuleEnvironment(
     /** `null`: no event - a container's initial value. */
@@ -23,7 +23,10 @@ class RuleEnvironment(
     val reads: Map<String, String>,
     val params: Boolean,
     val types: Map<String, ClassName?>,
-    val output: String?,
+    /** A cascading rule's allowed events (simple names); `null`: an expression rule. */
+    val outputs: Set<String>?,
+    /** More names - `result`/`error` in a request's `onSuccess`/`onFailure` - to their Kotlin names. */
+    val extra: Map<String, String> = emptyMap(),
 )
 
 /** [body]: the function body (a `return ...` statement); [usesParams]: it reads `params`. */
@@ -53,11 +56,12 @@ class RuleCompiler(private val env: RuleEnvironment) {
 
     fun compile(rule: Rule): CompiledRule {
         source = rule.source
-        val body = if (env.output == null) {
+        val outputs = env.outputs
+        val body = if (outputs == null) {
             if (rule.expr == null) fail(0, "A state handler's rule is an expression for the new state - `emit` is for cascading handlers")
             CodeBlock.of("return·%L\n", emit(rule.expr, depth = 0, min = 0))
         } else {
-            if (rule.expr != null) fail(0, "A cascading handler's rule emits events: `[when condition] emit ${env.output}(...)`")
+            if (rule.expr != null) fail(0, "A cascading handler's rule emits events: `[when condition] emit ${outputs.first()}(...)`")
             cascade(rule.clauses)
         }
         return CompiledRule(body, usesParams)
@@ -85,7 +89,10 @@ class RuleCompiler(private val env: RuleEnvironment) {
             is Expr.Name -> event.name.takeIf { it.first().isUpperCase() }
             else -> null
         } ?: return
-        if (type != env.output) fail(event.at, "This handler's output is ${env.output} - it can't emit $type")
+        val outputs = env.outputs.orEmpty()
+        if (type !in outputs) {
+            fail(event.at, if (outputs.size == 1) "This handler's output is ${outputs.single()} - it can't emit $type" else "This handler emits only ${outputs.sorted()} - it can't emit $type")
+        }
     }
 
     // Kotlin precedences, low to high - a child that binds looser than its position needs parens.
@@ -179,13 +186,14 @@ class RuleCompiler(private val env: RuleEnvironment) {
         "params" -> if (env.params) { usesParams = true; CodeBlock.of("params") } else fail(e.at, "This scope has no params")
         in env.stateNames -> CodeBlock.of("state")
         in env.reads -> CodeBlock.of("%N.value", env.reads.getValue(n))
+        in env.extra -> CodeBlock.of("%N", env.extra.getValue(n))
         "state" -> fail(e.at, "`state` is a state handler's own state - this handler cascades events; add the container to `reads` to use its value")
         else -> if (n.first().isUpperCase() && n in env.types) CodeBlock.of("%T", type(n, e.at))
         else fail(e.at, "Unknown name '$n' - this rule can use: ${available().joinToString()}")
     }
 
     private fun available(): List<String> =
-        listOfNotNull("event".takeIf { env.eventParameter != null }) + env.stateNames + env.reads.keys + listOfNotNull("params".takeIf { env.params })
+        listOfNotNull("event".takeIf { env.eventParameter != null }) + env.stateNames + env.reads.keys + env.extra.keys + listOfNotNull("params".takeIf { env.params })
 
     private fun type(name: String, at: Int): ClassName {
         if (name !in env.types) fail(at, "Unknown type '$name' - the schema's types: ${env.types.keys.sorted().joinToString()}")

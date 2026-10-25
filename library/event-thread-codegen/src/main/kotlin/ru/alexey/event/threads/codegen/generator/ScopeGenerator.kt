@@ -38,6 +38,8 @@ class ScopeGenerator(private val packageName: String) {
      * One container or handler the scope needs - a member of its bindings interface. [deps]: the
      * `Deps` it's built from, if any; [build]: the `Deps(...)` construction for `wire()`.
      */
+    internal enum class Kind { Container, Client, Api, Handler }
+
     internal class Member(
         val name: String,
         val returns: ClassName,
@@ -47,6 +49,7 @@ class ScopeGenerator(private val packageName: String) {
         /** `<Name>Rule(...)`: the default implementation, generated from the schema rule. */
         val default: CodeBlock? = null,
         val defaultClass: ClassName? = null,
+        val kind: Kind = if (handles == null) Kind.Container else Kind.Handler,
     )
 
     internal fun membersOf(context: GeneratorContext, scope: ScopeModel): List<Member> {
@@ -66,9 +69,31 @@ class ScopeGenerator(private val packageName: String) {
                 defaultClass = context.initialClass(c).takeIf { initial != null },
             )
         }
+        // Remote APIs the scope's requests call; a Ktor default needs the HttpClient.
+        val apis = context.apisOf(scope)
+        val ktorApis = apis.filter { context.ktor && it.isHttp }
+        val client = if (ktorApis.isEmpty()) emptyList() else listOf(
+            Member(
+                name = "httpClient", returns = HTTP_CLIENT, deps = null, build = null, handles = null,
+                default = CodeBlock.of(
+                    "error(%S)",
+                    "No HttpClient for scope '${scope.name}' - bind one in its DependencyProvider, or override ${ktorApis.joinToString { context.apiProperty(it) + "()" }}",
+                ),
+                defaultClass = null, kind = Kind.Client,
+            )
+        )
+        val apiMembers = apis.map { api ->
+            val ktor = api in ktorApis
+            Member(
+                name = context.apiProperty(api), returns = context.apiClass(api), deps = null, build = null, handles = null,
+                default = CodeBlock.of("%T(httpClient(%L))", context.ktorClass(api), if (scope.params != null) "params" else "").takeIf { ktor },
+                defaultClass = context.ktorClass(api).takeIf { ktor }, kind = Kind.Api,
+            )
+        }
         val handlers = scope.handlers.map(context::handlerOf).distinct().map { h ->
-            val args = listOfNotNull(h.ownState?.let { CodeBlock.of("%N", context.container(it).property) }) +
-                h.reads.map { CodeBlock.of("%N.%M()", context.container(it).property, CoreSymbols.snapshot) }
+            val args = listOfNotNull(h.writes?.let { CodeBlock.of("%N", context.container(it).property) }) +
+                h.reads.map { CodeBlock.of("%N.%M()", context.container(it).property, CoreSymbols.snapshot) } +
+                listOfNotNull(h.request?.let { CodeBlock.of("%N", context.apiProperty(context.endpointOf(it).first)) })
             Member(
                 name = h.className.simpleName.replaceFirstChar(Char::lowercaseChar),
                 returns = h.className,
@@ -76,14 +101,14 @@ class ScopeGenerator(private val packageName: String) {
                 // joinToCode, not joinToString: a stringified CodeBlock loses its imports.
                 build = if (args.isEmpty()) null else CodeBlock.of("%T(%L)", h.className.nestedClass("Deps"), args.joinToCode(", ")),
                 handles = h.event,
-                default = context.rules[h]?.let {
+                default = (context.rules[h] ?: context.requests[h])?.let {
                     val ruleArgs = listOfNotNull("deps".takeIf { args.isNotEmpty() }, "params".takeIf { context.ruleParams(h) != null })
                     CodeBlock.of("%T(%L)", h.ruleClassName, ruleArgs.joinToString(", "))
                 },
-                defaultClass = h.ruleClassName.takeIf { context.rules[h] != null },
+                defaultClass = h.ruleClassName.takeIf { context.rules[h] != null || context.requests[h] != null },
             )
         }
-        val members = containers + handlers
+        val members = containers + client + apiMembers + handlers
         val clashes = members.groupBy { it.name }.filterValues { it.size > 1 }.keys
         require(clashes.isEmpty()) { "Scope '${scope.name}': bindings $clashes would clash - rename a container's field or give a handler a `name`" }
         return members
@@ -124,10 +149,14 @@ class ScopeGenerator(private val packageName: String) {
                     memberFun(m).addModifiers(KModifier.ABSTRACT).build()
                 } else {
                     memberFun(m)
-                        .addKdoc(
-                            "Default: [%T], generated from the schema's %L - override for an implementation of your own.",
-                            m.defaultClass!!, if (m.handles == null) "`initial`" else "rule",
-                        )
+                        .apply {
+                            when (m.kind) {
+                                Kind.Client -> addKdoc("The HttpClient the generated Ktor APIs use - its base URL, JSON setup, auth.")
+                                Kind.Api -> addKdoc("Default: [%T] over [httpClient] - override for another transport, or a fake.", m.defaultClass!!)
+                                Kind.Container -> addKdoc("Default: [%T], generated from the schema's `initial` - override for an implementation of your own.", m.defaultClass!!)
+                                Kind.Handler -> addKdoc("Default: [%T], generated from the schema - override for an implementation of your own.", m.defaultClass!!)
+                            }
+                        }
                         .addStatement("return %L", default)
                         .build()
                 }
@@ -285,11 +314,11 @@ class ScopeGenerator(private val packageName: String) {
         val body = CodeBlock.builder()
         members.forEach { m ->
             val args = listOfNotNull(m.build, CodeBlock.of("params").takeIf { hasParams }).joinToCode(", ")
-            val handles = m.handles
-            if (handles == null) {
-                body.addStatement("val %N = container(%S, bindings.%N(%L))", m.name, m.name, m.name, args)
-            } else {
-                body.addStatement("on<%T>(bindings.%N(%L))", handles, m.name, args)
+            when (m.kind) {
+                Kind.Container -> body.addStatement("val %N = container(%S, bindings.%N(%L))", m.name, m.name, m.name, args)
+                Kind.Api -> body.addStatement("val %N = bindings.%N(%L)", m.name, m.name, args)
+                Kind.Client -> Unit   // only the Ktor APIs' defaults call it
+                Kind.Handler -> body.addStatement("on<%T>(bindings.%N(%L))", m.handles!!, m.name, args)
             }
         }
         return FunSpec.builder("wire")
@@ -300,6 +329,8 @@ class ScopeGenerator(private val packageName: String) {
     }
 
     companion object {
+        val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
+
         /** Members of `ScopeTyped`/`Scope` a container property must not shadow. */
         private val RESERVED = setOf(
             "key", "scopeKey", "params", "description", "dependencyProvider", "eventBus", "metadata", "emitters",

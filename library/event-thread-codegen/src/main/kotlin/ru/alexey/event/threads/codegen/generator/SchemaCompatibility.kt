@@ -2,6 +2,7 @@ package ru.alexey.event.threads.codegen.generator
 
 import ru.alexey.event.threads.codegen.model.HandlerModel
 import ru.alexey.event.threads.codegen.model.HandlerOutput
+import ru.alexey.event.threads.codegen.model.RemoteApiModel
 import ru.alexey.event.threads.codegen.model.ScopeDocument
 import ru.alexey.event.threads.codegen.model.ScopeModel
 import ru.alexey.event.threads.codegen.model.SemVer
@@ -41,10 +42,33 @@ object SchemaCompatibility {
     }
 
     fun check(baseline: ScopeDocument, current: ScopeDocument): Result {
-        val changes = diff(baseline.scopes, current.scopes)
+        val changes = diff(baseline.scopes, current.scopes) + remote(baseline.remote, current.remote)
         val required = changes.maxOfOrNull { it.level } ?: Level.NONE
         val problem = versionProblem(baseline.version, current.version, required)
         return Result(changes, required, problem)
+    }
+
+    /** Remote APIs: endpoints are interface members - removing or changing one breaks implementers. */
+    fun remote(before: List<RemoteApiModel>, after: List<RemoteApiModel>): List<Change> {
+        val out = mutableListOf<Change>()
+        val old = before.associateBy { it.name }
+        val new = after.associateBy { it.name }
+        (old.keys - new.keys).forEach { out += Change(Level.MAJOR, "remote API '$it' removed") }
+        (new.keys - old.keys).forEach { out += Change(Level.MINOR, "remote API '$it' added") }
+        (old.keys intersect new.keys).forEach { name ->
+            val a = old.getValue(name).endpoints.associateBy { it.name }
+            val b = new.getValue(name).endpoints.associateBy { it.name }
+            (a.keys - b.keys).forEach { out += Change(Level.MAJOR, "remote $name.$it removed") }
+            (b.keys - a.keys).forEach { out += Change(Level.MINOR, "remote $name.$it added") }
+            (a.keys intersect b.keys).forEach { e ->
+                val x = a.getValue(e)
+                val y = b.getValue(e)
+                if (x.args != y.args || x.response != y.response) out += Change(Level.MAJOR, "remote $name.$e: signature changed")
+                if (x.method != y.method || x.path != y.path || x.body != y.body) out += Change(Level.PATCH, "remote $name.$e: HTTP mapping changed")
+                if (x.description != y.description) out += Change(Level.PATCH, "remote $name.$e: description changed")
+            }
+        }
+        return out
     }
 
     fun diff(before: List<ScopeModel>, after: List<ScopeModel>): List<Change> {
@@ -92,7 +116,17 @@ object SchemaCompatibility {
             val y = newHandlers.getValue(key)
             val h = "$s handler $key"
             if (x.input != y.input) out += Change(Level.MAJOR, "$h: input event changed")
-            if (x.output != y.output) out += Change(Level.MAJOR, "$h: output changed")
+            val xr = x.output as? HandlerOutput.Request
+            val yr = y.output as? HandlerOutput.Request
+            if (xr != null && yr != null) {
+                // What the handler is (its call, container, events) vs how it behaves.
+                if (xr.call != yr.call || xr.into != yr.into || xr.emits != yr.emits) out += Change(Level.MAJOR, "$h: request call, container or emitted events changed")
+                if (xr.args != yr.args || xr.onSuccess != yr.onSuccess || xr.onFailure != yr.onFailure || xr.policy != yr.policy || xr.onMismatch != yr.onMismatch) {
+                    out += Change(Level.PATCH, "$h: request behaviour changed")
+                }
+            } else if (x.output != y.output) {
+                out += Change(Level.MAJOR, "$h: output changed")
+            }
             if (x.reads != y.reads) out += Change(Level.MAJOR, "$h: reads changed")
             if (x.override != y.override) out += Change(Level.MAJOR, "$h: override changed")
             if (x.privacy != y.privacy) out += Change(Level.PATCH, "$h: privacy changed")
@@ -117,6 +151,7 @@ object SchemaCompatibility {
     private fun handlerKey(h: HandlerModel): String = h.name ?: h.input.simpleName + when (h.output) {
         is HandlerOutput.Data -> "StateProcessor"
         is HandlerOutput.Event -> "EventCascader"
+        is HandlerOutput.Request -> "Request"
         HandlerOutput.None -> "SideEffect"
     }
 

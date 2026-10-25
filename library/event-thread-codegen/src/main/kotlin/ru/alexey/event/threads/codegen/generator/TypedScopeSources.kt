@@ -24,13 +24,20 @@ object TypedScopeSources {
         generate(packageName, ScopeDocument(scopes = scopes))
 
     /** [compose]: also `<Name>ScopeContent` composables, see [ComposeGenerator]. */
-    fun generate(packageName: String, document: ScopeDocument, generatorVersion: String? = null, compose: Boolean = false): List<FileSpec> {
-        val context = GeneratorContext(packageName, document.scopes, header(generatorVersion, document))
+    fun generate(
+        packageName: String,
+        document: ScopeDocument,
+        generatorVersion: String? = null,
+        compose: Boolean = false,
+        ktor: Boolean = true,
+    ): List<FileSpec> {
+        val context = GeneratorContext(packageName, document.scopes, header(generatorVersion, document), document.remote, ktor)
         val files = document.scopes.map { ScopeGenerator(packageName).generate(context, it) } +
             (if (compose) document.scopes.map { ComposeGenerator().generate(context, it) } else emptyList()) +
             EventsGenerator(packageName).generate(context) +
             ContainersGenerator(packageName).generate(context) +
             ModelsGenerator(packageName).generate(context) +
+            RemoteGenerator(ktor).generate(context) +
             schemaInfo(context, document)
         val clashes = files.groupBy { "${it.packageName}.${it.name}" }.filterValues { it.size > 1 }.keys
         require(clashes.isEmpty()) { "Specs generate clashing top-level types: $clashes" }
@@ -56,19 +63,19 @@ object TypedScopeSources {
     fun generateTests(packageName: String, scopes: List<ScopeModel>): List<FileSpec> =
         generateTests(packageName, ScopeDocument(scopes = scopes))
 
-    fun generateTests(packageName: String, document: ScopeDocument, generatorVersion: String? = null): List<FileSpec> =
-        TestSourcesGenerator(packageName).generate(GeneratorContext(packageName, document.scopes, header(generatorVersion, document)))
+    fun generateTests(packageName: String, document: ScopeDocument, generatorVersion: String? = null, ktor: Boolean = true): List<FileSpec> =
+        TestSourcesGenerator(packageName).generate(GeneratorContext(packageName, document.scopes, header(generatorVersion, document), document.remote, ktor))
 
     fun writeTo(outputDirectory: File, packageName: String, scopes: List<ScopeModel>) =
         writeTo(outputDirectory, packageName, ScopeDocument(scopes = scopes))
 
     /** Writes every generated file under [outputDirectory] (as a source root - package dirs are
      * created beneath it). */
-    fun writeTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null, compose: Boolean = false) {
-        generate(packageName, document, generatorVersion, compose).forEach { it.writeTo(outputDirectory) }
+    fun writeTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null, compose: Boolean = false, ktor: Boolean = true) {
+        generate(packageName, document, generatorVersion, compose, ktor).forEach { it.writeTo(outputDirectory) }
     }
 
-    fun writeTestsTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null) {
-        generateTests(packageName, document, generatorVersion).forEach { it.writeTo(outputDirectory) }
+    fun writeTestsTo(outputDirectory: File, packageName: String, document: ScopeDocument, generatorVersion: String? = null, ktor: Boolean = true) {
+        generateTests(packageName, document, generatorVersion, ktor).forEach { it.writeTo(outputDirectory) }
     }
 }

@@ -25,7 +25,7 @@ Contents: [Where rules go](#where-rules-go) · [Names](#names) · [Values](#valu
 [Testing](#testing) · [Versioning](#versioning) · [Cookbook](#cookbook) · [Limits](#limits) ·
 [Grammar](#grammar)
 
-Rules need `"format": "1.1"` in the schema document.
+Rules need `"format": "1.1"` in the schema document (requests: `"1.2"`, see [REMOTE.md](REMOTE.md)).
 
 ---
 
@@ -36,6 +36,8 @@ Rules need `"format": "1.1"` in the schema document.
 | `rule` | a `data` handler | an expression: the **new state** | `<Handler>Rule.process(event, state)` |
 | `rule` | an `event` handler | `emit` clauses: the **events to cascade** | `<Handler>Rule.cascade(input)` |
 | `initial` | a scope: `{ "<container>": "<expr>" }` | an expression: the container's **initial state** | `<State>ContainerInitial(<expr>)` |
+| `args` | a `request` output: `{ "<endpoint arg>": "<expr>" }` | an expression per argument of the remote call | the generated request's `call` |
+| `onSuccess` / `onFailure` | a `request` output | `emit` clauses, also seeing `result` / `error` | its `onSuccess` / `onFailure` |
 
 A side effect (`none`) can't have a rule - there's nothing to compute. A derived container can't
 have an `initial` - its state comes from its `transforms`.
@@ -56,6 +58,8 @@ the clock, I/O, logging, calling into your own classes.
 | a `reads` container's name (`totalAdded`) | that container's current value (a snapshot read) | handlers with `reads` |
 | `params` | the scope instance's params | scopes with `params` |
 | `it` | the current element | inside a pipeline stage |
+| `result` | the remote call's response | a request's `onSuccess` |
+| `error` | the failure (a `Throwable`: `error.message ?: ''`) | a request's `onFailure` |
 | a type's simple name (`Todo`, `AddLimitReached`) | `Todo(...)` constructs it; a bare `Done` is an `object` | every type and event the schema mentions |
 
 Fields are reached with `.`: `event.text`, `params.listId`, `it.done`, `event.todo.id` - and with

@@ -568,7 +568,10 @@ Simple behaviour needs no code at all: a handler's `rule` -
 `"state | remove where it.id == event.id"`, `"when totalAdded >= 5 emit AddLimitReached(totalAdded)"` -
 and a container's `initial` (`"showCompleted": "true"`) compile to generated implementations that
 are the bindings' defaults; bind your own to replace any of them
-([RULES.md](library/event-thread-codegen/RULES.md)). Generated scopes are typed up to the UI:
+([RULES.md](library/event-thread-codegen/RULES.md)). Server calls too: a `remote` API and a `request` handler
+generate the API interface with a Ktor implementation, the handler (concurrency policy, retries,
+timeout) and a `RemoteData` container - loading, data and errors, with the last value kept
+([REMOTE.md](library/event-thread-codegen/REMOTE.md)). Generated scopes are typed up to the UI:
 `workScope.todos: TodosContainer`, `send(...)` only for events the scope handles, and
 `WorkScopeContent(params) { val todos by todos.collectAsState() }` in Compose.
 
@@ -579,6 +582,8 @@ in `build/reports/eventThread`. Tests are generated too: a per-scope contract (e
 relations, and each schema `example` against your implementation) and a typed probe for your own
 behaviour tests.
 
+Remote data (`remote` APIs, `request` handlers, `RemoteData`):
+[library/event-thread-codegen/REMOTE.md](library/event-thread-codegen/REMOTE.md).
 The rule language (handler `rule`s, container `initial`s):
 [library/event-thread-codegen/RULES.md](library/event-thread-codegen/RULES.md).
 Writing a schema (developers and AI agents):

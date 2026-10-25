@@ -7,6 +7,8 @@ import org.company.sample.scopes.TodoDraftScopeContract
 import org.company.sample.scopes.TodoDraftScopeDependencyBindings
 import org.company.sample.scopes.TodoTabsScopeContract
 import org.company.sample.scopes.TodoTabsScopeDependencyBindings
+import org.company.sample.scopes.SuggestionsScopeContract
+import org.company.sample.scopes.SuggestionsScopeDependencyBindings
 import org.koin.dsl.koinApplication
 import ru.alexey.event.threads.di.koin.asDependencyProvider
 
@@ -29,4 +31,8 @@ class TodoTabsContractTest : TodoTabsScopeContract() {
 class TodoDraftContractTest : TodoDraftScopeContract() {
     override fun bindings() = TodoDraftScopeDependencyBindings(appProvider())
     override fun params() = TodoDraft.Params()
+}
+
+class SuggestionsContractTest : SuggestionsScopeContract() {
+    override fun bindings() = SuggestionsScopeDependencyBindings(appProvider())
 }

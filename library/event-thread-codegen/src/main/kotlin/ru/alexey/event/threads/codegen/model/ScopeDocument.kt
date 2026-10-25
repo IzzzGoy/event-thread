@@ -12,7 +12,8 @@ import kotlinx.serialization.Serializable
  * - [version] - the semver of *your* contract. Compared against a baseline (the schema as last
  *   released), it must be bumped as the changes require - see the compatibility check.
  *
- * Formats: 1.0 - scopes, handlers, relations, examples; 1.1 - handler `rule`s, container `initial`s. The earliest
+ * Formats: 1.0 - scopes, handlers, relations, examples; 1.1 - handler `rule`s, container `initial`s;
+ * 1.2 - `remote` APIs and `request` handlers. The earliest
  * shape - a bare array of scopes - still reads, as the current format with no version.
  */
 @Serializable
@@ -22,6 +23,8 @@ data class ScopeDocument(
     val format: String = ScopeFormat.CURRENT,
     val version: String? = null,
     val scopes: List<ScopeModel>,
+    /** Remote APIs the scopes' `request` handlers call. */
+    val remote: List<RemoteApiModel> = emptyList(),
 ) {
     init {
         ScopeFormat.requireSupported(format)
@@ -32,12 +35,19 @@ data class ScopeDocument(
         require(ruled.isEmpty() || ScopeFormat.atLeast(format, "1.1")) {
             "Handler rules and initial values need \"format\": \"1.1\" (this document is $format) - used by $ruled"
         }
+        val remoteUse = remote.map { "remote ${it.name}" } +
+            scopes.flatMap { s -> s.handlers.filter { it.output is HandlerOutput.Request }.map { "${s.name}.${it.input.simpleName}" } }
+        require(remoteUse.isEmpty() || ScopeFormat.atLeast(format, "1.2")) {
+            "Remote APIs and request handlers need \"format\": \"1.2\" (this document is $format) - used by $remoteUse"
+        }
+        val duplicateApis = remote.groupBy { it.name }.filterValues { it.size > 1 }.keys
+        require(duplicateApis.isEmpty()) { "Remote APIs $duplicateApis are declared more than once" }
     }
 }
 
 /** The schema-language version this plugin speaks. */
 object ScopeFormat {
-    const val CURRENT = "1.1"
+    const val CURRENT = "1.2"
 
     /** URL of the JSON Schema for the current format, for a document's `$schema`. */
     const val SCHEMA_URL = "https://raw.githubusercontent.com/IzzzGoy/event-thread/main/library/event-thread-codegen/scopes.schema.json"

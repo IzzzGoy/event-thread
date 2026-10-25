@@ -121,7 +121,7 @@ class TestSourcesGenerator(private val packageName: String) {
      */
     private fun eventFlow(context: GeneratorContext, scope: ScopeModel, newScope: CodeBlock): FunSpec {
         val produced = scope.handlers.groupBy { context.types.eventType(it.input) }.mapValues { (_, hs) ->
-            hs.mapNotNull { (it.output as? HandlerOutput.Event)?.event?.let(context.types::eventType) }.distinct()
+            hs.flatMap { h -> h.output.cascades.map(context.types::eventType) }.distinct()
         }
         return test("eventFlowMatchesSchema")
             .addStatement("val scope = %L", newScope)
@@ -171,6 +171,7 @@ class TestSourcesGenerator(private val packageName: String) {
      * state - so only the implementation's logic is under test. */
     private fun examples(context: GeneratorContext, scope: ScopeModel, model: HandlerModel, hasParams: Boolean): List<FunSpec> {
         if (model.examples.isEmpty()) return emptyList()
+        if (model.output is HandlerOutput.Request) return requestExamples(context, scope, model, model.output, hasParams)
         val values = ExampleValues(context.types)
         val handler = context.handlerOf(model)
         val factory = handler.className.simpleName.replaceFirstChar(Char::lowercaseChar)
@@ -213,7 +214,7 @@ class TestSourcesGenerator(private val packageName: String) {
                     val expected = example.emits!!.mapIndexed { i, e -> values.event(output.event, e, "$where.emits[$i]") }
                     body.addStatement("%M(listOf<%T>(%L), handler.preview(%L))", ASSERT_EQUALS, CoreSymbols.Event, expected.joinToCode(", "), event)
                 }
-                HandlerOutput.None -> Unit
+                HandlerOutput.None, is HandlerOutput.Request -> Unit
             }
             (listOfNotNull(own) + handler.reads).forEach { body.addStatement("%N.close()", context.container(it).property) }
 
@@ -226,13 +227,110 @@ class TestSourcesGenerator(private val packageName: String) {
         }
     }
 
+    /**
+     * A request's examples: its container stubbed with `given` (as the last loaded value), the
+     * API faked - the called endpoint responds `respond` or throws `fail` - then one
+     * `execute(event)`: the container must end `Success(respond)` (or `Failure` with that message,
+     * keeping `given`), and the events must be `emits`.
+     */
+    private fun requestExamples(
+        context: GeneratorContext,
+        scope: ScopeModel,
+        model: HandlerModel,
+        request: HandlerOutput.Request,
+        hasParams: Boolean,
+    ): List<FunSpec> {
+        val values = ExampleValues(context.types)
+        val handler = context.handlerOf(model)
+        val factory = handler.className.simpleName.replaceFirstChar(Char::lowercaseChar)
+        val (api, endpoint) = context.endpointOf(request)
+        val into = context.container(request.into)
+        val response = (request.into as ru.alexey.event.threads.codegen.model.ArgDef.Generics).parameters.single()
+        return model.examples.mapIndexed { index, example ->
+            val label = example.name ?: "$index"
+            val where = "${scope.name}.${handler.className.simpleName}[$label]"
+            val body = CodeBlock.builder()
+            val previous = example.given?.let { values.of(response, it, "$where.given") }
+            body.addStatement(
+                "val %N = object : %T() { override val source = %M<%T>(%L) }",
+                into.property, into.className, FLOW_RESOURCE, into.state,
+                previous?.let { CodeBlock.of("%T.Success(%L)", CoreSymbols.RemoteData, it) } ?: CodeBlock.of("%T.Idle", CoreSymbols.RemoteData),
+            )
+            handler.reads.forEach { read ->
+                val c = context.container(read)
+                val given = example.reads[c.property] ?: throw IllegalArgumentException("Example $where: needs `reads.${c.property}`")
+                body.addStatement(
+                    "val %N = object : %T() { override val source = %M<%T>(%L) }",
+                    c.property, c.className, FLOW_RESOURCE, c.state, values.of(read, given, "$where.${c.property}"),
+                )
+            }
+            val responded = if (example.fail != null) {
+                CodeBlock.of("throw %T(%S)", ClassName("kotlin", "IllegalStateException"), example.fail)
+            } else if (endpoint.response == null) {
+                CodeBlock.of("Unit")
+            } else {
+                CodeBlock.of("return %L", values.of(endpoint.response, example.respond!!, "$where.respond"))
+            }
+            val fake = TypeSpec.anonymousClassBuilder().addSuperinterface(context.apiClass(api))
+                .addFunctions(api.endpoints.map { e ->
+                    FunSpec.builder(e.name).addModifiers(KModifier.OVERRIDE, KModifier.SUSPEND)
+                        .apply { e.args.forEach { addParameter(it.fieldName!!, context.types.typeOf(it)) } }
+                        .returns(context.responseType(e))
+                        .apply {
+                            if (e != endpoint) addStatement("error(%S)", "${api.name}.${e.name} isn't called by this example")
+                            else if (endpoint.response == null && example.fail == null) addStatement("return Unit")
+                            else addStatement("%L", responded)
+                        }
+                        .build()
+                })
+                .build()
+            body.addStatement("val %N = %L", context.apiProperty(api), fake)
+            val deps = listOf(CodeBlock.of("%N", into.property)) +
+                handler.reads.map { CodeBlock.of("%N.%M()", context.container(it).property, CoreSymbols.snapshot) } +
+                CodeBlock.of("%N", context.apiProperty(api))
+            val args = listOfNotNull(
+                CodeBlock.of("%T(%L)", handler.className.nestedClass("Deps"), deps.joinToCode(", ")),
+                CodeBlock.of("params()").takeIf { hasParams },
+            )
+            body.addStatement("val handler = bindings().%N(%L)", factory, args.joinToCode(", "))
+            body.addStatement("val emitted = handler.execute(%L)", values.event(model.input, example.event, "$where.event"))
+            if (example.fail != null) {
+                body.addStatement("val state = %N.value", into.property)
+                body.addStatement("%M(state is %T.Failure && state.error.message == %S, %P)", ASSERT_TRUE, CoreSymbols.RemoteData, example.fail, "expected Failure(${example.fail}), was \$state")
+                body.addStatement("%M(%L, state.valueOrNull)", ASSERT_EQUALS, previous ?: CodeBlock.of("null"))
+            } else {
+                val value = endpoint.response?.let { values.of(it, example.respond!!, "$where.respond") } ?: CodeBlock.of("Unit")
+                body.addStatement("%M(%T.Success(%L), %N.value)", ASSERT_EQUALS, CoreSymbols.RemoteData, value, into.property)
+            }
+            val expected = example.emits.orEmpty().mapIndexed { i, e -> emitted(values, request, e, "$where.emits[$i]") }
+            body.addStatement("%M(listOf<%T>(%L), emitted)", ASSERT_EQUALS, CoreSymbols.Event, expected.joinToCode(", "))
+            (listOf(request.into) + handler.reads).forEach { body.addStatement("%N.close()", context.container(it).property) }
+
+            test("${factory}_example_$label")
+                .addKdoc("Schema example `%L` of %L (`%L`).", label, handler.className.simpleName, request.call)
+                .returns(TEST_RESULT)
+                .addCode("return %M {\n", RUN_TEST).addCode(body.build()).addCode("}\n")
+                .build()
+        }
+    }
+
+    /** An emitted event: its args - or, when the request emits several kinds, `{ "<Event>": args }`. */
+    private fun emitted(values: ExampleValues, request: HandlerOutput.Request, json: kotlinx.serialization.json.JsonElement, where: String): CodeBlock {
+        if (request.emits.size == 1) return values.event(request.emits.single(), json, where)
+        val tagged = (json as? kotlinx.serialization.json.JsonObject)?.entries?.singleOrNull()
+            ?: throw IllegalArgumentException("Example $where: with several `emits`, write each event as { \"<Event>\": { args } }")
+        val event = request.emits.find { it.simpleName == tagged.key }
+            ?: throw IllegalArgumentException("Example $where: '${tagged.key}' isn't one of the request's emits ${request.emits.map { it.simpleName }}")
+        return values.event(event, tagged.value.takeUnless { it is kotlinx.serialization.json.JsonNull }, where)
+    }
+
     // --- probe ------------------------------------------------------------------------------
 
     private fun probe(context: GeneratorContext, scope: ScopeModel): FileSpec {
         val n = Names(context, scope)
         val hasParams = scope.params != null
         val paramsType = scope.params?.let(context.types::typeOf) ?: UNIT
-        val containers = ScopeGenerator(packageName).membersOf(context, scope).filter { it.handles == null }
+        val containers = ScopeGenerator(packageName).membersOf(context, scope).filter { it.kind == ScopeGenerator.Kind.Container }
         val probe = ClassName(n.pkg, "${n.base}ScopeProbe")
         val recording = probe.nestedClass("Recording")
 
